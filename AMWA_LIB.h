@@ -41,6 +41,12 @@ class AMWA
 
   int UDP_Open(uint16_t port);
   bool UDP_Send(int id, String ipaddr,uint16_t port,String  sendstr);
+
+  int TCP_Server_Open(uint16_t port);
+  int TCP_Client_Open(String ipaddr, uint16_t port);
+  bool TCP_Send(int id, String  sendstr);
+
+  bool Socket_Close(uint16_t id);
   int available(int id);
   String passive_recv(int id,int len);
   bool recvmode_set(int mode,int event);

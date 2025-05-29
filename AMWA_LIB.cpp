@@ -54,7 +54,7 @@ bool AMWA::dhcp_on(int enable){
 /// @brief 指定文字列待ち受け
 /// @param res         待ち受けする文字列
 /// @param timeout_ms   タイムアウト[mesec]
-/// @param mode       //ALLMATCH:全て一致、STARTWITH:初めだけ一致、ENDWITH:最後だけ一致
+/// @param mode       //ALLMATCH:全て一致、STARTWITH:前方一致、ENDWITH:後方一致
 /// @return      {結果, 受信した文字列またはTIMEOUT}
 AMWA::WaitResult AMWA::waitResponce(String res, int timeout_ms ,int mode){
   char rcvbyte[RESBUFSIZE];
@@ -82,20 +82,20 @@ AMWA::WaitResult AMWA::waitResponce(String res, int timeout_ms ,int mode){
         switch (mode)
         {
         case ALLMATCH:
-        //全て一致するかをチェック
+        //文字列が全て一致するかをチェック
           if(rcvstr == res){
             return {true, rcvstr};;
           }
           break;
         case STARTWITH:
-         //初めの文字だけが一致するかをチェック 
+         //文字列が前方一致するかをチェック 
           if(rcvstr.startsWith(res)){
             return {true, rcvstr};
           }  
           break;
                break;
         case ENDWITH:
-         //最後の文字だけが一致するかをチェック 
+         //文字列が後方一致するかをチェック 
           if(rcvstr.endsWith(res)){
             return {true, rcvstr};
           }  
@@ -167,9 +167,93 @@ bool AMWA::UDP_Send(int id, String ipaddr,uint16_t port,String  sendstr){
   }
 }
 
+/// @brief TCP server オープンコマンド
+/// @param port AMWA側のLOCALポート
+/// @return OK時はid、NG時は-1
+int AMWA::TCP_Server_Open(uint16_t port){
+  int id = 0;
+  String para = "tcp," + String(port) + ",1";
+  AT_Send("+SOPEN=",para);
+  WaitResult res= waitResponce("+SOPEN:",1000,STARTWITH);
+  if(res.result){
+    //OKだった場合、idを取得
+    String idstr = res.restr.substring(7);
+    id = idstr.toInt();
+  }else{
+    //NGだった場合
+    id = -1;
+  }
+  return id;
+}
+
+/// @brief TCP client オープンコマンド
+/// @param ipaddr, port remote ipaddr, remote port
+/// @return OK時はid、NG時は-1
+int AMWA::TCP_Client_Open(String ipaddr, uint16_t port){
+  int id = 0;
+  String idstr = "";
+  String para = "tcp," + ipaddr +","+ String(port) + ",1";
+  AT_Send("+SOPEN=",para);
+  WaitResult res= waitResponce("+SOPEN:",1000,STARTWITH);
+  if(res.result){
+    //OKだった場合、idを取得
+    idstr = res.restr.substring(7);
+    id = idstr.toInt();
+  }else{
+    //NGだった場合
+    id = -1;
+    return id;
+  }
+  res= waitResponce("+SEVENT:CONNECT,"+idstr,1000,STARTWITH);
+  if(res.result){
+    ;
+  }else{
+    //時間内に接続できなかったのでsocket開放しておく
+    Socket_Close(id);
+    id = -1;
+  }
+  return id;
+}
+
+bool AMWA::TCP_Send(int id, String  sendstr){
+  int len = sendstr.length();
+  String para = String(id) + "," +  String(len);
+  AT_Send("+SSEND=",para);
+  WaitResult  res= waitResponce("OK",1000);
+  if(res.result){
+    at_serial->write(sendstr.c_str());
+    at_serial->flush();
+    return "OK";
+  }else{
+    return res.result;
+  }
+}
+
+/// @brief socket close コマンド
+/// @param id socket id
+/// @return OK時はtrue、NG時はfalse
+bool AMWA::Socket_Close(uint16_t id){
+  AT_Send("+SCLOSE=",String(id));
+  WaitResult res= waitResponce("+SCLOSE:"+String(id),1000,STARTWITH);
+  if(res.result){
+    //OKだった場合
+    return true;
+  }else{
+    //NGだった場合
+    return false;
+  }
+}
+
+/// @brief ソケット受信バイト取得 SRECV?コマンド
+/// @param id socket id
+/// @return 0以上:受信バイト数 -1:指定ソケットなし
 int AMWA::available(int id){
   AT_Send("+SRECV?","");
   WaitResult res= waitResponce("+SRECV:" +String(id),1000,STARTWITH);
+  if (res.result==false)
+  {
+    return -1;
+  }
   String numstr= res.restr.substring(9); 
   return numstr.toInt();
 }
