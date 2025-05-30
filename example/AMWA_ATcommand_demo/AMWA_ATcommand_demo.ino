@@ -11,14 +11,13 @@ static String GATEWAY = "192.168.1.1";
 static String SSID = "cs_11ah_ap";
 static String SEC = "sae";
 static String PASS = "12345678";
-// TCP server設定
+// UDP設定
 static int LOCAL_PORT = 4100;
 static String REMOTE_IP = "192.168.1.13";
 static int REMOTE_PORT = 4105;
 
 AMWA wifihalow(false, &AT_SERIAL, &INFO_SERIAL);
 int udpid;
-int connectedClientId = -1;
 
 void setup()
 {
@@ -69,7 +68,6 @@ void setup()
     }
     INFO_SERIAL.println("succeed.");
 
-
     // アクセスポイント接続
     INFO_SERIAL.println("connect to access point : {SSID,security,passphrase}={" + SSID + "," + SEC + "," + PASS + "}");
     wifihalow.AT_Send("+WCONN=", SSID + "," + SEC + "," + PASS);
@@ -93,11 +91,10 @@ void setup()
     // OKだった場合、socket idを取得
     udpid = res.restr.substring(7).toInt();
     INFO_SERIAL.println("succeed. socket id:"+String(udpid));
-
-    INFO_SERIAL.println("all initialize completed. enter loop.");
     
     //初期化終了
     init_finish = true;
+    INFO_SERIAL.println("all initialize completed. enter loop.");
   }
 }
 
