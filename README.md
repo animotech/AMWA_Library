@@ -11,7 +11,7 @@
 
 ## 概要
 
-"Wi-Fi HaLow ArduinoシールドAMWA-01"をArduino R4から操作するためのライブラリです。<br>
+"Wi-Fi HaLow ArduinoシールドAMWA-01"をArduino Uno R4から操作するためのライブラリです。<br>
 AMWA-01 ATコマンドマニュアルとあわせて読んでいただくと、わかりやすいです。
 
 ## ライブラリ説明
@@ -175,7 +175,7 @@ UDPエコーを行うサンプルです。
 
 ハードウェア
 * Wi-Fi HaLow ArduinoシールドAMWA-01
-* Arduino R4 minima または Wi-Fi
+* Arduino Uno R4 minima または Wi-Fi
 * Wi-Fi Halow アクセスポイント
 
 ソフトウェア
@@ -192,7 +192,7 @@ Arduino IDEのツールバーFile->Examples->AMWA_Library->AMWA_UDP_echoを選�
 これはUDP受信をエコー送信するデモです。<br>
 コード上部でdefineされているIPアドレス設定、アクセスポイント設定、UDP設定を自身の環境にあわせて変更してください。<br>
 Arduino IDEの左上にあるチェックボタンを押してコンパイルし、コンパイルが通ることを確認します。<br>
-コンパイルに問題がなければ、Arduino R4(HaLowシールド装着済み)をPCに接続して、矢印ボタンを押して書き込みます。
+コンパイルに問題がなければ、Arduino Uno R4(HaLowシールド装着済み)をPCに接続して、矢印ボタンを押して書き込みます。
 
 ### 動作確認<!-- omit in toc -->
 
