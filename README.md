@@ -19,6 +19,11 @@ AMWA-01 ATコマンドマニュアルとあわせて読んでいただくと、�
 * **AMWA**<br>
 クラスです。
 
+* **WaitResult**<br>
+WaitResult構造体です。<br>
+    bool result : 文字列待ちの結果<br>
+    String restr : 来た文字列<br>
+
 * **AMWA(bool on, Stream *amwa_serial, Stream *arduino_serial)**<br>
   コンストラクタです。<br>
   ・bool on : trueでシリアルモニタにUART RXDが表示されるようになる(デバッグ用)<br>
@@ -27,77 +32,124 @@ AMWA-01 ATコマンドマニュアルとあわせて読んでいただくと、�
 
 * **void AT_Send(String atcmd, String para)**<br>
 ATコマンドを送信する関数です。<br>
+引数<br>
 ・String atcmd : 送信するコマンド<br>
 ・String para : 送信するパラメータ<br>
+返り値<br>
+・なし<br>
 
 * **bool ipaddr_set(String ipaddr, String subnet, String gateway)**<br>
 IPアドレスを設定する関数です。(AT+IPADDRコマンド)<br>
+引数<br>
 ・String ipaddr : デバイスのIPv4アドレス<br>
 ・String subnet : デバイスのネットマスク<br>
 ・String gateway : デバイスのデフォルトゲートウェイ<br>
+返り値<br>
+・bool : 処理が正常終了したらtrue
 
 * **bool dhcp_on(int enable)**<br>
 DHCP有効設定をする関数です。(AT+DHCPコマンド)<br>
+引数<br>
 ・int enable : DHCP状態 0=DHCP無効, 1=DHCP有効<br>
+返り値<br>
+・bool : 処理が正常終了したらtrue
 
 * **void AMWA_init( void )**<br>
 初期化およびリセットをする関数です。<br>
+引数<br>
+・なし<br>
+返り値<br>
+・なし<br>
 
 * **WaitResult waitResponce(String res, int timeout_ms, int mode=ALLMATCH)**<br>
 AMWA-01からのUARTレスポンスを待つ関数です。<br>
+引数<br>
 ・String res : 待ちたいレスポンス文字列<br>
 ・int timeout_ms : タイムアウト時間[msec]<br>
 ・int mode : 待ちモード ALLMATCH=完全一致, STARTWITH=前方一致, ENDWITH=後方一致<br>
+返り値<br>
+・WaitResult : 処理が正常終了したらWaitResult.resultがtrue
+
 
 * **bool wifiConnect(String ssid, String security , String pass, int timeout_ms)**<br>
 アクセスポイントに接続する関数です。(AT+WCONNコマンド)<br>
+引数<br>
 ・String ssid : アクセスポイントの識別名<br>
 ・String security : アクセスポイントの暗号化方式、“sae”、“owe”、“open”のいずれかを入力してください。<br>
 ・String pass : アクセスポイントに接続するためのパスワード<br>
 ・int timeout_ms : タイムアウト時間[msec]<br>
+返り値<br>
+・bool : 処理が正常終了したらtrue
 
 * **int UDP_Open(uint16_t port)**<br>
 UDPソケットを作成する関数です。(AT+SOPENコマンド)<br>
+引数<br>
 ・uint16_t port : 通信に使用するポート番号<br>
+返り値<br>
+・int : ソケットID, 失敗したら-1
 
 * **bool UDP_Send(int id, String ipaddr, uint16_t port, String sendstr)**<br>
 UDP送信をする関数です。(AT+SSENDコマンド)<br>
+引数<br>
 ・int id : <br>
 ・String ipaddr : 通信先IPv4アドレス<br>
 ・uint16_t port : 通信先ポート番号<br>
 ・String  sendstr : 送信文字列<br>
+返り値<br>
+・bool : 処理が正常終了したらtrue
 
 * **int TCP_Server_Open(uint16_t port)**<br>
 TCPサーバソケットを作成する関数です。(AT+SOPENコマンド)<br>
+引数<br>
 ・uint16_t port : クライアントを待つポート番号<br>
+返り値<br>
+・int : ソケットID, 失敗したら-1
 
 * **int TCP_Client_Open(String ipaddr, uint16_t port)**<br>
 TCPクライアントソケットを作成する関数です。(AT+SOPENコマンド)<br>
+引数<br>
 ・String ipaddr : 接続先TCPサーバのIPv4アドレス<br>
 ・uint16_t port : 接続先TCPサーバのポート番号<br>
+返り値<br>
+・int : ソケットID, 失敗したら-1
 
 * **bool TCP_Send(int id, String sendstr)**<br>
 TCP送信をする関数です。(AT+SSENDコマンド)<br>
+引数<br>
 ・int id : ソケットID<br>
 ・String sendstr : 送信文字列<br>
+返り値<br>
+・bool : 処理が正常終了したらtrue
 
 * **bool Socket_Close(uint16_t id)**<br>
 ソケット終了関数です。(AT+SCLOSEコマンド)<br>
+引数<br>
 ・uint16_t id : ソケットID<br>
+返り値<br>
+・bool : 処理が正常終了したらtrue
 
 * **int available(int id)**<br>
 データ受信を確認する関数です。(AT+SRECVコマンド)<br>
+引数<br>
 ・int id : ソケットID<br>
+返り値<br>
+・int : 正常終了したら受信バイト数, 失敗したら-1
 
 * **String passive_recv(int id, int len)**<br>
 パッシブモード時にデータ受信を行う関数です。(AT+SRECVコマンド)<br>
+引数<br>
 ・int id : ソケットID<br>
 ・int len : 受信するバイト数<br>
+返り値<br>
+・int : 受信文字列
 
 * **bool recvmode_set(int mode, int event)**<br>
 データ受信モードを設定する関数です。(AT+SRECVMODEコマンド)<br>
+引数<br>
 ・int mode : 受信モード切り替え 0:アクティブ 1:パッシブ<br>
 ・int event : 受信完了イベント設定 0:イベント無効 1:イベント有効<br>
+返り値<br>
+・bool : 処理が正常終了したらtrue
 
 ## デモ説明
  
