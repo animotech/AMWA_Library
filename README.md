@@ -90,15 +90,67 @@ TCP送信をする関数です。(AT+SSENDコマンド)<br>
 ・int mode : 受信モード切り替え 0:アクティブ 1:パッシブ<br>
 ・int event : 受信完了イベント設定 0:イベント無効 1:イベント有効<br>
 
+## デモ説明
+ 
+* **AMWA_ATcommand_demo**<br>
+AT_Send関数を使用してUDPエコーを行うサンプルです。
+
+* **AMWA_Serial_echo**<br>
+AMWA-01との通信に使用するUARTと、シリアルモニタに使用するUARTをソフト的に直接接続します。<br>
+シリアルモニタから直接ATコマンド操作ができるようになります。
+
+* **AMWA_TCP_client_echo**<br>
+AMWA-01がTCPクライアントになり、指定したTCPサーバーから受信したデータをエコーします。
+
+* **AMWA_TCP_server_echo**<br>
+AMWA-01がTCPサーバにーなり、TCPクライアントから受信したデータをエコーします。
+
+* **AMWA_UDP_echo**<br>
+UDPエコーを行うサンプルです。
+
 ## 使用ガイド
 
 ### 用意するもの
 
+ハードウェア
+* Wi-Fi HaLow ArduinoシールドAMWA-01
+* Arduino R4 minima または Wi-Fi
+* Wi-Fi Halow アクセスポイント
+
+ソフトウェア
+* Arduino IDE
+
 ### ライブラリの追加
 
-### デモの書き込み
+このリポジトリをダウンロードし、以下のガイドに従ってArduino IDEにライブラリを追加します。<br>
+https://docs.arduino.cc/software/ide-v1/tutorials/installing-libraries/
+
+### デモのコンパイル/書き込み
+
+Arduino IDEのツールバーFile->Examples->AMWA_Library->AMWA_UDP_echoを選択します。
+これはUDP受信をエコー送信するデモです。<br>
+コード上部でdefineされているIPアドレス設定、アクセスポイント設定、UDP設定を自身の環境にあわせて変更してください。<br>
+Arduino IDEの左上にあるチェックボタンを押してコンパイルし、コンパイルが通ることを確認します。<br>
+コンパイルに問題がなければ、Arduino R4(HaLowシールド装着済み)をPCに接続して、矢印ボタンを押して書き込みます。
 
 ### 動作確認
+
+シリアルモニタを確認し、以下のような表示になっていればアクセスポイントに接続成功しています。<br>
+```
+AMWA UDP DEMO Start
+init start
+wi-fi connect to ekh01-cb95
+connect success
+udp open, port:4098
+open succsess, id = 0
+```
+PCなどからUDP送信をすると、エコーが返ってくることを確認します。また、シリアルモニタに以下のような表示が出ることを確認します。(以下では、hello udpを送信しています)
+```
+udp rcv: hello udp
+udp send
+send succsess
+```
+
 
 ## 著者
 
@@ -106,5 +158,4 @@ TCP送信をする関数です。(AT+SSENDコマンド)<br>
 
 ## ライセンス情報
 
-This project is licensed under the [NAME HERE] License - see the LICENSE.md file for details
 
