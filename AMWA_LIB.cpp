@@ -26,11 +26,13 @@ void AMWA::AMWA_init( void ){
 /// @param para  送信するパラメータ
 void AMWA::AT_Send(String  atcmd,String  para){
   String  sendstr ="AT" + atcmd + para +TERM;
+  //UART受信のバッファを読み込んでクリア
   while (at_serial->available())at_serial->read();
   //送信
   at_serial->print(sendstr);
   at_serial->flush();
-  delay(10);
+  //送信後、少し待つ（送信中に受信読み込みをすると失敗する場合があるため）
+  //delay(10);
 }
 
 /// @brief AMWAのIPアドレスをセット
@@ -122,16 +124,22 @@ AMWA::WaitResult AMWA::waitResponce(String res, int timeout_ms ,int mode){
   return {false, "TIMEOUT"};
 }
 
-/// @brief 
-/// @param ssid 
-/// @param security 
-/// @param pass 
-/// @param timeout_ms 
-/// @return 
+/// @brief AP 接続コマンド
+/// @param ssid     SSID または BSSID
+/// @param security "sae" / "owe" / "open"
+/// @param pass     パスワード（sae 時のみ使用、open/owe 時は無視）
+/// @param timeout_ms LINK_UP 待ちタイムアウト
+/// @return LINK_UP 取得時 true
 bool AMWA::wifiConnect(String ssid, String security , String pass, int timeout_ms){
-  String para = ssid + "," + security + ","  + pass;
+  // firmware の WCONN は open/owe では 2 引数、sae では 3 引数を要求する
+  String para;
+  if (security == "sae") {
+    para = ssid + "," + security + "," + pass;
+  } else {
+    para = ssid + "," + security;
+  }
   AT_Send("+WCONN=",para);
-  return waitResponce("+WEVENT:LINK_UP",timeout_ms,STARTWITH).result; 
+  return waitResponce("+WEVENT:LINK_UP",timeout_ms,STARTWITH).result;
 }
 
 /// @brief UDPオープンコマンド
@@ -161,9 +169,9 @@ bool AMWA::UDP_Send(int id, String ipaddr,uint16_t port,String  sendstr){
   if(res.result){
     at_serial->write(sendstr.c_str());
     at_serial->flush();
-    return "OK";
+    return true;
   }else{
-    return res.result;
+    return false;
   }
 }
 
@@ -223,9 +231,9 @@ bool AMWA::TCP_Send(int id, String  sendstr){
   if(res.result){
     at_serial->write(sendstr.c_str());
     at_serial->flush();
-    return "OK";
+    return true;
   }else{
-    return res.result;
+    return false;
   }
 }
 
@@ -262,7 +270,14 @@ String AMWA::passive_recv(int id,int len){
   String para = String(id) + "," + String(len);
   AT_Send("+SRECV=",para);
   WaitResult res= waitResponce("+RXD:" +String(id),1000,STARTWITH);
+  // ヘッダ受信に失敗したらタイムアウトを payload と勘違いさせない
+  if(!res.result){
+    return String("");
+  }
   res= waitResponce("",1000,STARTWITH);
+  if(!res.result){
+    return String("");
+  }
   return res.restr;
 }
 //AT+SRECVMODE=<mode>[,<event>][CR]
@@ -271,4 +286,168 @@ bool AMWA::recvmode_set(int mode,int event){
   String para = String(mode) + "," + String(event);
   AT_Send("+SRECVMODE=",para);
   return waitResponce("OK" ,1000).result;
+}
+
+/// @brief 次回起動モード設定
+/// @param mode "AP" or "STA"
+/// @return 正常終了時 true
+/// @note 即時切替ではなく configstore への予約。settings_save() + reboot() で確定する。
+bool AMWA::mode_set(String mode){
+  AT_Send("+WMODE=", mode);
+  return waitResponce("OK", 1000).result;
+}
+
+/// @brief AP モード用アクセスポイント設定
+/// @param ssid     SSID
+/// @param security "sae" or "open"（owe は firmware 側で拒否されるため弾く）
+/// @param password パスワード（sae 時のみ使用、open 時は無視）
+/// @param channel  S1G チャンネル番号（0 を指定すると country list 先頭チャンネル）
+/// @return 正常終了時 true。security が "sae"/"open" 以外の場合は AT 送信せず false
+bool AMWA::ap_config_set(String ssid, String security, String password, uint16_t channel){
+  // firmware の WAPCFG は open では 3 引数、sae では 4 引数を要求する
+  String para;
+  if(security == "sae"){
+    para = ssid + "," + security + "," + password + "," + String(channel);
+  }else if(security == "open"){
+    para = ssid + "," + security + "," + String(channel);
+  }else{
+    // owe や typo を弾く
+    return false;
+  }
+  AT_Send("+WAPCFG=", para);
+  return waitResponce("OK", 1000).result;
+}
+
+/// @brief AP モード用 IP アドレス設定
+/// @param ipaddr  AP 自身の IP アドレス
+/// @param netmask サブネットマスク
+/// @param gateway ゲートウェイ
+/// @return 正常終了時 true
+bool AMWA::ap_ip_set(String ipaddr, String netmask, String gateway){
+  String para = ipaddr + "," + netmask + "," + gateway;
+  AT_Send("+WAPIP=", para);
+  return waitResponce("OK", 1000).result;
+}
+
+/// @brief STA 接続先 AP 設定（接続せず credentials のみ保存）
+/// @param ssid     SSID または BSSID
+/// @param security "sae" / "owe" / "open"
+/// @param password パスワード（sae 時のみ使用、open/owe 時は無視）
+/// @return 正常終了時 true。security が "sae"/"owe"/"open" 以外の場合は AT 送信せず false
+bool AMWA::sta_ap_set(String ssid, String security, String password){
+  // firmware の WAP は open/owe では 2 引数、sae では 3 引数を要求する
+  String para;
+  if(security == "sae"){
+    para = ssid + "," + security + "," + password;
+  }else if(security == "open" || security == "owe"){
+    para = ssid + "," + security;
+  }else{
+    // typo を弾く
+    return false;
+  }
+  AT_Send("+WAP=", para);
+  return waitResponce("OK", 1000).result;
+}
+
+/// @brief 設定を不揮発メモリに保存
+/// @return 正常終了時 true
+/// @note STA/AP 両方の設定と次回起動モードを一括保存する
+bool AMWA::settings_save(){
+  AT_Send("+WSAVE", "");
+  return waitResponce("OK", 1000).result;
+}
+
+/// @brief AMWA-01 を再起動（ATZ）
+/// @note ATZ は応答せず即チップリセットされる。応答待ちはしない。
+void AMWA::reboot(){
+  AT_Send("Z", "");
+}
+
+/// @brief AutoUDP 設定（常に有効化）
+/// @param local_port  ローカルポート
+/// @param remote_ip   リモート IP アドレス
+/// @param remote_port リモートポート
+/// @return 正常終了時 true
+bool AMWA::auto_udp_set(uint16_t local_port, String remote_ip, uint16_t remote_port){
+  String para = "1," + String(local_port) + "," + remote_ip + "," + String(remote_port);
+  AT_Send("+SAUDP=", para);
+  return waitResponce("OK", 1000).result;
+}
+
+/// @brief AutoUDP 無効化
+/// @return 正常終了時 true
+bool AMWA::auto_udp_disable(){
+  AT_Send("+SAUDP=", "0");
+  return waitResponce("OK", 1000).result;
+}
+
+/// @brief AutoUDP モード起動直後に AT* で AT モードへ抜ける
+/// @param timeout_ms "exit" 応答待ちタイムアウト（firmware の exit 待ちウィンドウは 5 秒固定なので 6000 程度推奨）
+/// @return AT モード復帰時 true
+/// @note AMWA-01 起動後 5 秒以内（"AutoUDP" 出力後の exit 待ちウィンドウ内）に呼ぶこと
+bool AMWA::auto_udp_escape(unsigned long timeout_ms){
+  AT_Send("*", "");
+  return waitResponce("exit", timeout_ms, STARTWITH).result;
+}
+
+/// @brief AMWA-01 の起動状態を判別
+/// @param timeout_ms "AutoUDP" 出力検出に費やす時間（5000ms 以上推奨）
+/// @return BOOT_AUTOUDP / BOOT_AT_MODE / BOOT_TIMEOUT
+AMWA::BootState AMWA::detect_boot_state(unsigned long timeout_ms){
+  // "AutoUDP" 出力を待つ。検出できれば設定済み
+  if(waitResponce("AutoUDP", timeout_ms, STARTWITH).result){
+    return BOOT_AUTOUDP;
+  }
+  // 検出されなければ AT モードかどうか確認するため "AT" を送って "OK" を待つ
+  AT_Send("", "");
+  if(waitResponce("OK", 1000, ALLMATCH).result){
+    return BOOT_AT_MODE;
+  }
+  return BOOT_TIMEOUT;
+}
+
+/// @brief AutoUDP モード突入後 socket オープン完了まで待つ
+/// @param timeout_ms 全体タイムアウト
+/// @return +SOPEN: 受信時 true / "exit" or "ERROR:" 受信時 false / タイムアウト時 false
+/// @note "start" や "+WEVENT:*" は内部でログ出力のみで継続。+SOPEN: で成功確定。
+///       "exit"（AT* 等で AutoUDP を抜けた場合）や "ERROR:" は失敗として早期 return する。
+bool AMWA::wait_autoudp_started(unsigned long timeout_ms){
+  char rcvbyte[RESBUFSIZE];
+  int cnt = 0;
+  uint32_t startMillis = millis();
+
+  do {
+    if(at_serial->available() > 0){
+      char b = (char)at_serial->read();
+      rcvbyte[cnt] = b;
+      if(logon){
+        log_serial->write(b);
+      }
+
+      if(b == TERM){
+        rcvbyte[cnt] = '\0';
+        String rcvstr = String(rcvbyte);
+        // 行頭/行末の空白・改行コード（将来 \r\n 混在時の \n 残留など）を除去
+        rcvstr.trim();
+
+        // 成功: socket オープン完了
+        if(rcvstr.startsWith("+SOPEN:")){
+          return true;
+        }
+        // 失敗: AutoUDP を抜けた / エラー
+        if(rcvstr.startsWith("exit") || rcvstr.startsWith("ERROR:")){
+          return false;
+        }
+        // start や +WEVENT:CONNECT_SUCCESS / LINK_UP / APSTART_SUCCESS などはログ扱いで継続
+        cnt = 0;
+      }else{
+        cnt++;
+        if(cnt >= RESBUFSIZE){
+          cnt = 0;
+        }
+      }
+    }
+  } while ((millis() - startMillis) < timeout_ms);
+
+  return false;
 }

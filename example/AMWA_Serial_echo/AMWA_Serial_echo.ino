@@ -7,7 +7,6 @@
 AMWA wifihalow(false,&AT_SERIAL,&INFO_SERIAL);
 
 void setup() {
-  string restr;
   bool init_finish=false;
   INFO_SERIAL.begin(115200);
   AT_SERIAL.begin(115200);

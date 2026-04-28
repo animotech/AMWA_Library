@@ -20,7 +20,6 @@ AMWA wifihalow(false,&AT_SERIAL,&INFO_SERIAL);
 int udpid;
 
 void setup() {
-  string restr;
   bool init_finish=false;;
   INFO_SERIAL.begin(115200);
   AT_SERIAL.begin(115200);
@@ -60,7 +59,7 @@ void setup() {
     //UDPオープン
     INFO_SERIAL.print("udp open, port:");
     INFO_SERIAL.println(LOCAL_PORT);
-    int udpid = wifihalow.UDP_Open(LOCAL_PORT);
+    udpid = wifihalow.UDP_Open(LOCAL_PORT);
     if(udpid >= 0){
       INFO_SERIAL.print("open succsess, id = ");
       INFO_SERIAL.println(udpid);

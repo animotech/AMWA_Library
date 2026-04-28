@@ -1,6 +1,6 @@
 
-#ifndef _AMWA_AT_H_
-#define _AMWA_AT_H
+#ifndef AMWA_LIB_H
+#define AMWA_LIB_H
 #include <Arduino.h>
 #include<string>
 
@@ -28,6 +28,13 @@ class AMWA
     bool result;
     String restr;
   }WaitResult;
+
+  enum BootState {
+    BOOT_AT_MODE,    // 通常 AT モードで起動した（AutoUDP 未設定）
+    BOOT_AUTOUDP,    // AutoUDP モードで起動した（設定済み）
+    BOOT_TIMEOUT     // 応答なし
+  };
+
   bool logon;
   Stream* at_serial;
   Stream* log_serial;
@@ -50,9 +57,32 @@ class AMWA
   int available(int id);
   String passive_recv(int id,int len);
   bool recvmode_set(int mode,int event);
- 
+
+  // ---- モード設定 ----
+  bool mode_set(String mode);                                                     // AT+WMODE=AP|STA（次回起動モード）
+
+  // ---- AP モード設定 ----
+  bool ap_config_set(String ssid, String security, String password, uint16_t channel); // AT+WAPCFG（open 時 password 省略）
+  bool ap_ip_set(String ipaddr, String netmask, String gateway);                  // AT+WAPIP=ip,netmask,gw
+
+  // ---- STA モード設定 ----
+  bool sta_ap_set(String ssid, String security, String password);                 // AT+WAP（接続せず credentials のみ保存。open 時 password 省略）
+
+  // ---- 設定保存・再起動 ----
+  bool settings_save();                                                           // AT+WSAVE
+  void reboot();                                                                  // ATZ（応答待ちなし、チップリセット）
+
+  // ---- AutoUDP 制御 ----
+  bool auto_udp_set(uint16_t local_port, String remote_ip, uint16_t remote_port); // AT+SAUDP=1,...（常に有効化）
+  bool auto_udp_disable();                                                        // AT+SAUDP=0
+  bool auto_udp_escape(unsigned long timeout_ms);                                 // AutoUDP モード起動直後に AT* で抜ける
+
+  // ---- AutoUDP 起動シーケンス ----
+  BootState detect_boot_state(unsigned long timeout_ms);                          // 起動直後に AT/AutoUDP を判別
+  bool wait_autoudp_started(unsigned long timeout_ms);                            // "+SOPEN:" で成功 / "exit" or "ERROR:" で失敗 / "start" や "+WEVENT:*" は通過
+
 };
 
 
- 
-#endif //_AMWA_AT_H_
+
+#endif //AMWA_LIB_H
