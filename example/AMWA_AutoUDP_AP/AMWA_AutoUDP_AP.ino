@@ -91,6 +91,28 @@ static void resetHostSerialAndChip() {
   wifihalow.AMWA_init();
 }
 
+// AutoUDP 設定を投入する。
+// 新 firmware では 6 引数版で rx_format も保存できる。
+// 旧 firmware は 6 引数版を知らず ERROR:101 を返すため、5 引数版に fallback する。
+static bool configureAutoUdp() {
+  uint8_t rxFormat = AUTOUDP_SHOW_RXD ? AUTOUDP_RX_FORMAT_HEADER : AUTOUDP_RX_FORMAT_RAW;
+
+  if (wifihalow.auto_udp_set(LOCAL_PORT, REMOTE_IP, REMOTE_PORT, AUTOUDP_BAUD, rxFormat)) {
+    return true;
+  }
+
+  INFO_SERIAL.println("[CONFIG] SAUDP rx_format was not accepted. Retrying without rx_format...");
+  if (wifihalow.auto_udp_set(LOCAL_PORT, REMOTE_IP, REMOTE_PORT, AUTOUDP_BAUD)) {
+#if !AUTOUDP_SHOW_RXD
+    INFO_SERIAL.println("[CONFIG] WARNING: firmware does not support payload-only AutoUDP RX.");
+    INFO_SERIAL.println("[CONFIG]          +RXD headers will remain enabled until firmware is updated.");
+#endif
+    return true;
+  }
+
+  return failStep("SAUDP");
+}
+
 // AP 設定を投入して保存する（AT モードであることが前提）
 // コマンド順は v1 仕様準拠：WMODE → WAPCFG → WAPIP → WSAVE → SAUDP
 // 保存後の reboot/reset は呼び出し側で行う。
@@ -108,8 +130,7 @@ static bool configureAndSave() {
   if (!wifihalow.settings_save())                                                   return failStep("WSAVE");
 
   INFO_SERIAL.println("[CONFIG] Setting AutoUDP...");
-  uint8_t rxFormat = AUTOUDP_SHOW_RXD ? AUTOUDP_RX_FORMAT_HEADER : AUTOUDP_RX_FORMAT_RAW;
-  if (!wifihalow.auto_udp_set(LOCAL_PORT, REMOTE_IP, REMOTE_PORT, AUTOUDP_BAUD, rxFormat))    return failStep("SAUDP");
+  if (!configureAutoUdp())                                                          return false;
 
   return true;
 }
