@@ -129,7 +129,12 @@ AMWA::WaitResult AMWA::waitResponce(String res, int timeout_ms ,int mode){
 /// @param timeout_ms 
 /// @return 
 bool AMWA::wifiConnect(String ssid, String security , String pass, int timeout_ms){
-  String para = ssid + "," + security + ","  + pass;
+  String para;
+  if (security == "sae") {
+    para = ssid + "," + security + "," + pass;
+  } else {
+    para = ssid + "," + security;
+  }
   AT_Send("+WCONN=",para);
   return waitResponce("+WEVENT:LINK_UP",timeout_ms,STARTWITH).result; 
 }
@@ -161,9 +166,9 @@ bool AMWA::UDP_Send(int id, String ipaddr,uint16_t port,String  sendstr){
   if(res.result){
     at_serial->write(sendstr.c_str());
     at_serial->flush();
-    return "OK";
+    return true;
   }else{
-    return res.result;
+    return false;
   }
 }
 
@@ -223,9 +228,9 @@ bool AMWA::TCP_Send(int id, String  sendstr){
   if(res.result){
     at_serial->write(sendstr.c_str());
     at_serial->flush();
-    return "OK";
+    return true;
   }else{
-    return res.result;
+    return false;
   }
 }
 
@@ -262,7 +267,13 @@ String AMWA::passive_recv(int id,int len){
   String para = String(id) + "," + String(len);
   AT_Send("+SRECV=",para);
   WaitResult res= waitResponce("+RXD:" +String(id),1000,STARTWITH);
+  if(!res.result){
+    return String("");
+  }
   res= waitResponce("",1000,STARTWITH);
+  if(!res.result){
+    return String("");
+  }
   return res.restr;
 }
 //AT+SRECVMODE=<mode>[,<event>][CR]

@@ -71,7 +71,7 @@ void loop() {
     INFO_SERIAL.print(REMOTE_IP);
     INFO_SERIAL.print("/");
     INFO_SERIAL.println(REMOTE_PORT);
-    int tcpcid = wifihalow.TCP_Client_Open(REMOTE_IP,REMOTE_PORT);
+    tcpcid = wifihalow.TCP_Client_Open(REMOTE_IP,REMOTE_PORT);
     if(tcpcid >= 0){
       INFO_SERIAL.print("open succsess, id = ");
       INFO_SERIAL.println(tcpcid);

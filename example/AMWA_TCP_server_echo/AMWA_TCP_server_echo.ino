@@ -59,7 +59,7 @@ void setup() {
     //TCP serverオープン
     INFO_SERIAL.print("tcp server open, port:");
     INFO_SERIAL.println(LOCAL_PORT);
-    int tcpsid = wifihalow.TCP_Server_Open(LOCAL_PORT);
+    tcpsid = wifihalow.TCP_Server_Open(LOCAL_PORT);
     if(tcpsid >= 0){
       INFO_SERIAL.print("open succsess, id = ");
       INFO_SERIAL.println(tcpsid);
