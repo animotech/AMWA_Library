@@ -19,6 +19,10 @@
 #define  DHCP_DISABLE 0
 #define  DHCP_ENABLE 1
 
+// AutoUDP 受信出力形式
+#define  AUTOUDP_RX_FORMAT_HEADER 0
+#define  AUTOUDP_RX_FORMAT_RAW 1
+
 
 using namespace std;
 class AMWA
@@ -38,6 +42,7 @@ class AMWA
   bool logon;
   Stream* at_serial;
   Stream* log_serial;
+  void (*baud_switch_cb)(uint32_t new_baud) = nullptr;   // wait_autoudp_started 中の +UART_SWITCH 検出時に呼ばれる
   AMWA(bool on, Stream *amwa_serial,Stream *arduino_serial);
   void AT_Send(String atcmd,String para);
   bool ipaddr_set(String  ipaddr,String  subnet, String  gateway);
@@ -73,9 +78,27 @@ class AMWA
   void reboot();                                                                  // ATZ（応答待ちなし、チップリセット）
 
   // ---- AutoUDP 制御 ----
-  bool auto_udp_set(uint16_t local_port, String remote_ip, uint16_t remote_port); // AT+SAUDP=1,...（常に有効化）
+  bool auto_udp_set(uint16_t local_port, String remote_ip, uint16_t remote_port); // AT+SAUDP=1,...（常に有効化、baud は変更しない）
+  bool auto_udp_set(uint16_t local_port, String remote_ip, uint16_t remote_port,
+                    uint32_t baud);                                               // AT+SAUDP=1,...,baud（baud も保存）
+  bool auto_udp_set(uint16_t local_port, String remote_ip, uint16_t remote_port,
+                    uint32_t baud, uint8_t rx_format);                            // AT+SAUDP=1,...,baud,rx_format（受信出力形式も保存）
   bool auto_udp_disable();                                                        // AT+SAUDP=0
   bool auto_udp_escape(unsigned long timeout_ms);                                 // AutoUDP モード起動直後に AT* で抜ける
+
+  // ---- UART baud 自動切替 callback ----
+  /// @brief AutoUDP 突入時にチップが "+UART_SWITCH:<baud>\r" を送ってきたとき
+  ///        wait_autoudp_started から呼ばれる callback を登録する。
+  ///        併せて AMWA_init() の中でも 115200 で呼ばれ、リセット時に
+  ///        ホスト側 AT_SERIAL を default に戻すのに使われる。
+  /// @note  callback は新しい baud (uint32_t) を受け取り、ホスト側で
+  ///        AT_SERIAL.end() / AT_SERIAL.begin(<baud>) を実行してチップに
+  ///        追従する責務がある。
+  /// @note  callback を **登録しないまま** AutoUDP で baud 切替を使うと、
+  ///        chip だけが新 baud になり host は旧 baud のまま残るため通信不能になる。
+  ///        AutoUDP で 115200 以外を使う場合は必ず登録すること。
+  typedef void (*BaudSwitchCallback)(uint32_t new_baud);
+  void set_baud_switch_callback(BaudSwitchCallback cb);
 
   // ---- AutoUDP 起動シーケンス ----
   BootState detect_boot_state(unsigned long timeout_ms);                          // 起動直後に AT/AutoUDP を判別

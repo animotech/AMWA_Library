@@ -13,8 +13,17 @@ AMWA::AMWA(bool on, Stream *amwa_serial,Stream *arduino_serial){
 }
 
 /// @brief 初期化及びリセット
-/// @param  
+/// @param
+/// @note  reset 後の chip は default 115200 で boot する。AutoUDP 中に baud を
+///        切替えていた場合、host 側の AT_SERIAL も 115200 に戻さないと
+///        chip の boot 出力 (AMW_AT_COMMAND...) が読めない。
+///        chip が reset 解除される前に host を 115200 に戻したいので、
+///        callback 呼び出しは pin reset の前に行う。
 void AMWA::AMWA_init( void ){
+  // host 側 AT_SERIAL を default baud (115200) に先に戻す
+  if (baud_switch_cb != nullptr) {
+    baud_switch_cb(115200);
+  }
   pinMode( AMWA_RESET_pin, OUTPUT );
   digitalWrite( AMWA_RESET_pin, HIGH );
   delay(100);
@@ -70,44 +79,57 @@ AMWA::WaitResult AMWA::waitResponce(String res, int timeout_ms ,int mode){
       //データをバッファに格納
       incomingByte= at_serial->read();
       rcvbyte[cnt] = (char)incomingByte;
-      //logonがtrue時に受信したデータを表示
-      if(logon){
-        log_serial->write(rcvbyte[cnt]);
-      }
+      // 注: ここで per-byte に log_serial->write をすると、UNO R4 では USB CDC
+      // 呼び出しの per-call オーバーヘッドで UART RX ISR レイテンシが
+      // 87us (115200 baud) を超える瞬間があり、HW UART OVERRUN で
+      // 文字落ちすることがある。logon の echo は行末で chunk 出力する。
       //改行文字が来たら解析
       if( rcvbyte[cnt] == TERM){
+        // logon=true なら、ここで 1 行ぶんをまとめて echo する
+        if(logon){
+          log_serial->write((const uint8_t*)rcvbyte, cnt + 1);
+        }
         //文字列にするため改行文字をNULLに置き換え
         rcvbyte[cnt] = '\0';
         //文字列に変換
         String rcvstr = String(rcvbyte);
-        //全て
+        // 比較用に trim したコピー (前行 CRLF の LF 残留対策)
+        String trimmed = rcvstr;
+        trimmed.trim();
+
+        // 戻り値の文字列：
+        //   - res が空文字列 (passive_recv の payload 取得) のときは raw を返す
+        //     （payload を改変しない。先頭/末尾の空白も payload の一部かもしれない）
+        //   - それ以外 (AT 応答) は trimmed を返す
+        //     （substring(7) で +SOPEN: の id を取り出す等、ホスト側の位置計算が
+        //      LF 残留でズレるのを防ぐ）
+        String returnStr = (res.length() == 0) ? rcvstr : trimmed;
         switch (mode)
         {
         case ALLMATCH:
         //文字列が全て一致するかをチェック
-          if(rcvstr == res){
-            return {true, rcvstr};;
+          if(trimmed == res){
+            return {true, returnStr};
           }
           break;
         case STARTWITH:
-         //文字列が前方一致するかをチェック 
-          if(rcvstr.startsWith(res)){
-            return {true, rcvstr};
-          }  
+         //文字列が前方一致するかをチェック
+          if(trimmed.startsWith(res)){
+            return {true, returnStr};
+          }
           break;
-               break;
         case ENDWITH:
-         //文字列が後方一致するかをチェック 
-          if(rcvstr.endsWith(res)){
-            return {true, rcvstr};
-          }  
+         //文字列が後方一致するかをチェック
+          if(trimmed.endsWith(res)){
+            return {true, returnStr};
+          }
           break;
         default:
           break;
         }
         //エラーが返って来ていたらNGとしてループを抜ける。
-        if(rcvstr.startsWith("ERROR:")){
-          return {false, rcvstr};
+        if(trimmed.startsWith("ERROR:")){
+          return {false, trimmed};   // エラー文字列は trimmed を返す
         }else{
           cnt = 0;
         }
@@ -115,6 +137,10 @@ AMWA::WaitResult AMWA::waitResponce(String res, int timeout_ms ,int mode){
         cnt++;
         //BUFFサイズを超えたら0にする
         if(cnt >= RESBUFSIZE){
+          // バッファ満杯時は溜まっているぶんを echo してから wrap
+          if(logon){
+            log_serial->write((const uint8_t*)rcvbyte, RESBUFSIZE);
+          }
           cnt = 0;
         }
       }
@@ -262,7 +288,7 @@ int AMWA::available(int id){
   {
     return -1;
   }
-  String numstr= res.restr.substring(9); 
+  String numstr= res.restr.substring(9);
   return numstr.toInt();
 }
 
@@ -374,6 +400,37 @@ bool AMWA::auto_udp_set(uint16_t local_port, String remote_ip, uint16_t remote_p
   return waitResponce("OK", 1000).result;
 }
 
+/// @brief AutoUDP 設定 (5 引数版)。AutoUDP 突入時に切替える UART baud も保存する
+/// @param local_port  ローカルポート
+/// @param remote_ip   リモート IP アドレス
+/// @param remote_port リモートポート
+/// @param baud        AutoUDP 突入時に切替える UART baud (9600〜921600)
+/// @return 正常終了時 true
+bool AMWA::auto_udp_set(uint16_t local_port, String remote_ip, uint16_t remote_port, uint32_t baud){
+  String para = "1," + String(local_port) + "," + remote_ip + "," + String(remote_port) + "," + String(baud);
+  AT_Send("+SAUDP=", para);
+  return waitResponce("OK", 1000).result;
+}
+
+/// @brief AutoUDP 設定 (6 引数版)。UART baud と AutoUDP 受信出力形式も保存する
+/// @param local_port  ローカルポート
+/// @param remote_ip   リモート IP アドレス
+/// @param remote_port リモートポート
+/// @param baud        AutoUDP 突入時に切替える UART baud (9600〜921600)
+/// @param rx_format   AUTOUDP_RX_FORMAT_HEADER: +RXD header + payload / AUTOUDP_RX_FORMAT_RAW: payload only
+/// @return 正常終了時 true
+bool AMWA::auto_udp_set(uint16_t local_port, String remote_ip, uint16_t remote_port, uint32_t baud, uint8_t rx_format){
+  String para = "1," + String(local_port) + "," + remote_ip + "," + String(remote_port) + "," + String(baud) + "," + String(rx_format);
+  AT_Send("+SAUDP=", para);
+  return waitResponce("OK", 1000).result;
+}
+
+/// @brief +UART_SWITCH:<baud> 検出時に呼ばれる callback を登録する
+/// @param cb  callback 関数ポインタ。NULL を渡すと解除。
+void AMWA::set_baud_switch_callback(BaudSwitchCallback cb){
+  baud_switch_cb = cb;
+}
+
 /// @brief AutoUDP 無効化
 /// @return 正常終了時 true
 bool AMWA::auto_udp_disable(){
@@ -391,8 +448,14 @@ bool AMWA::auto_udp_escape(unsigned long timeout_ms){
 }
 
 /// @brief AMWA-01 の起動状態を判別
-/// @param timeout_ms "AutoUDP" 出力検出に費やす時間（5000ms 以上推奨）
+/// @param timeout_ms "AutoUDP" 出力検出に費やす時間
+///        （AP 初回 boot は ap_init() の link up 待ちに最大 30 秒かかるので
+///         40000ms 程度推奨。AT モード未設定の場合この時間まるまる待つことになる）
 /// @return BOOT_AUTOUDP / BOOT_AT_MODE / BOOT_TIMEOUT
+/// @note  FW_VERSION: 等での早期確定は不可能。chip は FW_VERSION 出力後に
+///        ap_init/sta_init を実行してから "AutoUDP" を出すため、FW_VERSION
+///        ベースの短縮判定は AutoUDP 設定済み時に "AutoUDP" を見逃して
+///        誤判定する。timeout_ms 全体を素直に待つしかない。
 AMWA::BootState AMWA::detect_boot_state(unsigned long timeout_ms){
   // "AutoUDP" 出力を待つ。検出できれば設定済み
   if(waitResponce("AutoUDP", timeout_ms, STARTWITH).result){
@@ -408,8 +471,9 @@ AMWA::BootState AMWA::detect_boot_state(unsigned long timeout_ms){
 
 /// @brief AutoUDP モード突入後 socket オープン完了まで待つ
 /// @param timeout_ms 全体タイムアウト
-/// @return +SOPEN: 受信時 true / "exit" or "ERROR:" 受信時 false / タイムアウト時 false
-/// @note "start" や "+WEVENT:*" は内部でログ出力のみで継続。+SOPEN: で成功確定。
+/// @return +SOPEN: or +RXD:<id>,0,... 受信時 true / "exit" or "ERROR:" 受信時 false / タイムアウト時 false
+/// @note "start" や "+WEVENT:*" は内部でログ出力のみで継続。基本は +SOPEN: で成功確定。
+///       AP 側では peer の zero-length prime packet (+RXD:<id>,0,...) が先に見える場合も ready と扱う。
 ///       "exit"（AT* 等で AutoUDP を抜けた場合）や "ERROR:" は失敗として早期 return する。
 bool AMWA::wait_autoudp_started(unsigned long timeout_ms){
   char rcvbyte[RESBUFSIZE];
@@ -420,19 +484,74 @@ bool AMWA::wait_autoudp_started(unsigned long timeout_ms){
     if(at_serial->available() > 0){
       char b = (char)at_serial->read();
       rcvbyte[cnt] = b;
-      if(logon){
-        log_serial->write(b);
-      }
+      // logon の echo は行末で chunk 出力する。per-byte だと UNO R4 で
+      // UART RX ISR レイテンシが 87us (115200 baud) deadline を超えて
+      // HW OVERRUN を起こすため。
 
       if(b == TERM){
+        // String 化のため TERM を '\0' で上書きするが、ログ echo は TERM を含めて
+        // 出したいので、書き戻すために行長を保持しておく。
+        int line_len = cnt + 1;   // TERM を含む長さ
         rcvbyte[cnt] = '\0';
         String rcvstr = String(rcvbyte);
         // 行頭/行末の空白・改行コード（将来 \r\n 混在時の \n 残留など）を除去
         rcvstr.trim();
 
+        // チップが UART baud を切替えるアナウンス。
+        // チップは本行送出後 50ms で UART を再初期化する。host 側はこの 50ms
+        // 窓内で AT_SERIAL を新 baud に begin() し直す必要がある。
+        // USB CDC への echo (log_serial->write) は Serial Monitor が遅いと
+        // 数 ms ブロックしうるため、callback より先に echo すると窓を食い潰す。
+        // → +UART_SWITCH: のみ「先に callback、後で echo」の順にする。
+        if(rcvstr.startsWith("+UART_SWITCH:")){
+          long new_baud = rcvstr.substring(13).toInt();
+          if(new_baud >= 9600 && new_baud <= 921600 && baud_switch_cb != nullptr){
+            // ★ callback を echo より先に呼んで window 確保
+            baud_switch_cb((uint32_t)new_baud);
+          }
+          // callback で host AT_SERIAL は新 baud に切替え済み。echo は USB CDC
+          // 側だけなので AT_SERIAL の状態には影響しない。タイミングが緩んだ
+          // ところでログ表示する（NUL ではなく TERM '\r' で改行が出るよう書き戻し）。
+          if(logon){
+            rcvbyte[cnt] = TERM;   // 書き戻して echo
+            log_serial->write((const uint8_t*)rcvbyte, line_len);
+          }
+          // callback 側で host UART は貼り直し済み。ここで追加 delay/drain すると、
+          // 切替え直後に届く +SOPEN: や +RXD: を取りこぼす可能性がある。
+          cnt = 0;
+          continue;
+        }
+
+        // 通常行: logon なら 1 行ぶんをまとめて echo してから判定
+        if(logon){
+          rcvbyte[cnt] = TERM;   // 書き戻して echo (NUL ではなく TERM を出すため)
+          log_serial->write((const uint8_t*)rcvbyte, line_len);
+        }
+
         // 成功: socket オープン完了
         if(rcvstr.startsWith("+SOPEN:")){
           return true;
+        }
+        // AP 側では +SOPEN: が見えないまま、STA の zero-length prime packet
+        // (+RXD:<id>,0,...) が先に届くことがある。この時点で socket は
+        // 受信可能なので ready とみなす。payload 付き +RXD は header だけを
+        // 消費してしまうため、fallback ready には使わない。
+        if(rcvstr.startsWith("+RXD:")){
+          int firstComma = rcvstr.indexOf(',');
+          int secondComma = (firstComma >= 0) ? rcvstr.indexOf(',', firstComma + 1) : -1;
+          if(firstComma >= 0 && secondComma > firstComma + 1){
+            bool len_valid = true;
+            for(int i = firstComma + 1; i < secondComma; i++){
+              char c = rcvstr.charAt(i);
+              if(c < '0' || c > '9'){
+                len_valid = false;
+                break;
+              }
+            }
+            if(len_valid && rcvstr.substring(firstComma + 1, secondComma).toInt() == 0){
+              return true;
+            }
+          }
         }
         // 失敗: AutoUDP を抜けた / エラー
         if(rcvstr.startsWith("exit") || rcvstr.startsWith("ERROR:")){
@@ -443,6 +562,10 @@ bool AMWA::wait_autoudp_started(unsigned long timeout_ms){
       }else{
         cnt++;
         if(cnt >= RESBUFSIZE){
+          // バッファ満杯時は溜まっているぶんを echo してから wrap
+          if(logon){
+            log_serial->write((const uint8_t*)rcvbyte, RESBUFSIZE);
+          }
           cnt = 0;
         }
       }
