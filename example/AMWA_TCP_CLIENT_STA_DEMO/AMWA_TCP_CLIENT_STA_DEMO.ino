@@ -16,6 +16,7 @@
  * Serial Monitor 設定:
  *   - baud rate: 115200
  *   - line ending: CRLF
+ *   - input limit: 128 characters per line
  *
  * IP / Port 対応表:
  *   - STA local IP     : AMWA_IPADDR  = 192.168.11.12
@@ -40,6 +41,7 @@
 #define PASS "12345678"
 #define REMOTE_IP "192.168.11.17"
 #define REMOTE_PORT 4099
+#define MAX_INPUT_LEN 128
 
 AMWA wifihalow(false,&AT_SERIAL,&INFO_SERIAL);
 
@@ -49,6 +51,7 @@ String sendStr = "";
 void setup() {
   INFO_SERIAL.begin(115200);
   AT_SERIAL.begin(115200);
+  sendStr.reserve(MAX_INPUT_LEN);
   delay(1000);
   INFO_SERIAL.println("AMWA TCP CLIENT STA DEMO Start");
 
@@ -129,6 +132,11 @@ void loop() {
     sendStr += c;
     if(sendStr.endsWith("\r\n")){
       sendStr.remove(sendStr.length() - 2);
+      if(sendStr.length() > MAX_INPUT_LEN){
+        INFO_SERIAL.println("Input too long. Cleared.");
+        sendStr = "";
+        continue;
+      }
       if(sendStr == "AT*"){
         INFO_SERIAL.println("Restarting Arduino.");
         delay(100);
@@ -141,6 +149,9 @@ void loop() {
           INFO_SERIAL.println("TCP send failed.");
         }
       }
+      sendStr = "";
+    }else if(sendStr.length() > (MAX_INPUT_LEN + 1)){
+      INFO_SERIAL.println("Input too long. Cleared.");
       sendStr = "";
     }
   }
