@@ -144,7 +144,7 @@ TCP送信をする関数です。(AT+SSENDコマンド)<br>
 ・int id : ソケットID<br>
 ・int len : 受信するバイト数<br>
 返り値<br>
-・int : 受信文字列
+・String : 受信文字列。受信失敗時は空文字列
 
 * **bool recvmode_set(int mode, int event)**<br>
 データ受信モードを設定する関数です。(AT+SRECVMODEコマンド)<br>
