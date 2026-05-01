@@ -69,6 +69,7 @@ class AMWA
   // ---- AP モード設定 ----
   bool ap_config_set(String ssid, String security, String password, uint16_t channel); // AT+WAPCFG（open 時 password 省略）
   bool ap_ip_set(String ipaddr, String netmask, String gateway);                  // AT+WAPIP=ip,netmask,gw
+  int apsta_get(String *mac_list);                                                // AT+WAPSTA? (connected STA MAC list)
 
   // ---- STA モード設定 ----
   bool sta_ap_set(String ssid, String security, String password);                 // AT+WAP（接続せず credentials のみ保存。open 時 password 省略）

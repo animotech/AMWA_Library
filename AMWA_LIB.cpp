@@ -355,6 +355,35 @@ bool AMWA::ap_ip_set(String ipaddr, String netmask, String gateway){
   return waitResponce("OK", 1000).result;
 }
 
+int AMWA::apsta_get(String *mac_list){
+  int mac_count = 0;
+
+  AT_Send("+WAPSTA?", "");
+  WaitResult res = waitResponce("+WAPSTA:", 1000, STARTWITH);
+  if(!res.result){
+    return 0;
+  }
+
+  if(res.restr == "+WAPSTA:NONE"){
+    return 0;
+  }
+
+  while(res.result && res.restr.startsWith("+WAPSTA:")){
+    mac_list[mac_count] = res.restr.substring(8);
+    mac_count++;
+
+    res = waitResponce("+WAPSTA:", 200, STARTWITH);
+    if(!res.result){
+      break;
+    }
+    if(res.restr == "+WAPSTA:NONE"){
+      break;
+    }
+  }
+
+  return mac_count;
+}
+
 /// @brief STA 接続先 AP 設定（接続せず credentials のみ保存）
 /// @param ssid     SSID または BSSID
 /// @param security "sae" / "owe" / "open"
