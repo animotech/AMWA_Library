@@ -12,18 +12,12 @@ AMWA::AMWA(bool on, Stream *amwa_serial,Stream *arduino_serial){
   log_serial = arduino_serial;
 }
 
-/// @brief 初期化及びリセット
+/// @brief AMWA-01 をハードウェアリセットする
 /// @param
-/// @note  reset 後の chip は default 115200 で boot する。AutoUDP 中に baud を
-///        切替えていた場合、host 側の AT_SERIAL も 115200 に戻さないと
-///        chip の boot 出力 (AMW_AT_COMMAND...) が読めない。
-///        chip が reset 解除される前に host を 115200 に戻したいので、
-///        callback 呼び出しは pin reset の前に行う。
+/// @note reset 後の chip は、AT+UARTW で不揮発保存されている baudrate で boot する。
+///       そのため host 側の AT_SERIAL は、reset 前からその保存 baudrate に合わせておく必要がある。
+///       AMWA_init() 自体は baudrate を変更せず、reset pin のトグルだけを行う。
 void AMWA::AMWA_init( void ){
-  // host 側 AT_SERIAL を default baud (115200) に先に戻す
-  if (baud_switch_cb != nullptr) {
-    baud_switch_cb(115200);
-  }
   pinMode( AMWA_RESET_pin, OUTPUT );
   digitalWrite( AMWA_RESET_pin, HIGH );
   delay(100);
@@ -355,13 +349,17 @@ bool AMWA::ap_ip_set(String ipaddr, String netmask, String gateway){
   return waitResponce("OK", 1000).result;
 }
 
-int AMWA::apsta_get(String *mac_list){
+int AMWA::apsta_get(String *mac_list, int max_count){
   int mac_count = 0;
+
+  if(max_count <= 0){
+    return -1;
+  }
 
   AT_Send("+WAPSTA?", "");
   WaitResult res = waitResponce("+WAPSTA:", 1000, STARTWITH);
   if(!res.result){
-    return 0;
+    return -1;
   }
 
   if(res.restr == "+WAPSTA:NONE"){
@@ -369,8 +367,10 @@ int AMWA::apsta_get(String *mac_list){
   }
 
   while(res.result && res.restr.startsWith("+WAPSTA:")){
-    mac_list[mac_count] = res.restr.substring(8);
-    mac_count++;
+    if(mac_count < max_count){
+      mac_list[mac_count] = res.restr.substring(8);
+      mac_count++;
+    }
 
     res = waitResponce("+WAPSTA:", 200, STARTWITH);
     if(!res.result){
@@ -382,7 +382,7 @@ int AMWA::apsta_get(String *mac_list){
   }
 
   return mac_count;
-}
+  }
 
 /// @brief STA 接続先 AP 設定（接続せず credentials のみ保存）
 /// @param ssid     SSID または BSSID
@@ -540,26 +540,6 @@ bool AMWA::wait_autoudp_started(unsigned long timeout_ms){
         // 行頭/行末の空白・改行コード（将来 \r\n 混在時の \n 残留など）を除去
         rcvstr.trim();
 
-        // チップが UART baud を切替えるアナウンス。
-        // チップは本行送出後 50ms で UART を再初期化する。host 側はこの 50ms
-        // 窓内で AT_SERIAL を新 baud に begin() し直す必要がある。
-        // USB CDC への echo (log_serial->write) は Serial Monitor が遅いと
-        // 数 ms ブロックしうるため、callback より先に echo すると窓を食い潰す。
-        // → +UART_SWITCH: のみ「先に callback、後で echo」の順にする。
-        if(rcvstr.startsWith("+UART_SWITCH:")){
-          long new_baud = rcvstr.substring(13).toInt();
-          if(new_baud >= 9600 && new_baud <= 921600 && baud_switch_cb != nullptr){
-            // ★ callback を echo より先に呼んで window 確保
-            baud_switch_cb((uint32_t)new_baud);
-          }
-          // callback で host AT_SERIAL は新 baud に切替え済み。echo は USB CDC
-          // 側だけなので AT_SERIAL の状態には影響しない。タイミングが緩んだ
-          // ところでログ表示する（NUL ではなく TERM '\r' で改行が出るよう書き戻し）。
-          if(logon){
-            rcvbyte[cnt] = TERM;   // 書き戻して echo
-            log_serial->write((const uint8_t*)rcvbyte, line_len);
-          }
-          // callback 側で host UART は貼り直し済み。ここで追加 delay/drain すると、
           // 切替え直後に届く +SOPEN: や +RXD: を取りこぼす可能性がある。
           cnt = 0;
           continue;

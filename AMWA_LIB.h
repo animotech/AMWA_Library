@@ -69,7 +69,7 @@ class AMWA
   // ---- AP モード設定 ----
   bool ap_config_set(String ssid, String security, String password, uint16_t channel); // AT+WAPCFG（open 時 password 省略）
   bool ap_ip_set(String ipaddr, String netmask, String gateway);                  // AT+WAPIP=ip,netmask,gw
-  int apsta_get(String *mac_list);                                                // AT+WAPSTA? (connected STA MAC list)
+  int apsta_get(String *mac_list, int max_count);                                 // AT+WAPSTA? (-1: error, 0: none, 1+: connected STA count)
 
   // ---- STA モード設定 ----
   bool sta_ap_set(String ssid, String security, String password);                 // AT+WAP（接続せず credentials のみ保存。open 時 password 省略）
@@ -87,21 +87,8 @@ class AMWA
   bool auto_udp_disable();                                                        // AT+SAUDP=0
   bool auto_udp_escape(unsigned long timeout_ms);                                 // AutoUDP モード起動直後に AT* で抜ける
 
-  // ---- UART baud 自動切替 callback ----
-  /// @brief AutoUDP 突入時にチップが "+UART_SWITCH:<baud>\r" を送ってきたとき
-  ///        wait_autoudp_started から呼ばれる callback を登録する。
-  ///        併せて AMWA_init() の中でも 115200 で呼ばれ、リセット時に
-  ///        ホスト側 AT_SERIAL を default に戻すのに使われる。
-  /// @note  callback は新しい baud (uint32_t) を受け取り、ホスト側で
-  ///        AT_SERIAL.end() / AT_SERIAL.begin(<baud>) を実行してチップに
-  ///        追従する責務がある。
-  /// @note  callback を **登録しないまま** AutoUDP で baud 切替を使うと、
-  ///        chip だけが新 baud になり host は旧 baud のまま残るため通信不能になる。
-  ///        AutoUDP で 115200 以外を使う場合は必ず登録すること。
   bool baudrate_setting_set(int baudrate);                                        // AT+UARTW=<baud>
   int baudrate_setting_get(void);                                                 // AT+UARTW?
-  typedef void (*BaudSwitchCallback)(uint32_t new_baud);
-  void set_baud_switch_callback(BaudSwitchCallback cb);
 
   // ---- AutoUDP 起動シーケンス ----
   BootState detect_boot_state(unsigned long timeout_ms);                          // 起動直後に AT/AutoUDP を判別
