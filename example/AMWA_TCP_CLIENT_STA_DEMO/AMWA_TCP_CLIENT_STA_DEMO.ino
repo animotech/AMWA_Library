@@ -126,7 +126,7 @@ void loop() {
     return;
   }
 
-  // Serial Monitorから文字列を受信して、CRLFが来たら送信
+  //Serial Monitorから文字列を受信して、CRLFが来たら送信
   while(INFO_SERIAL.available() > 0){
     char c = (char)INFO_SERIAL.read();
     sendStr += c;
@@ -137,16 +137,11 @@ void loop() {
         sendStr = "";
         continue;
       }
-      if(sendStr == "AT*"){
-        INFO_SERIAL.println("Restarting Arduino.");
-        delay(100);
-        NVIC_SystemReset();
-      }
       if(sendStr.length() > 0){
-        if(tcpcid >= 0 && wifihalow.TCP_Send(tcpcid, sendStr)){
-          INFO_SERIAL.println(String("SEND:") + sendStr);
+        if(wifihalow.UDP_Send(udpid,REMOTE_IP,REMOTE_PORT, sendStr )){
+        INFO_SERIAL.println(String("SEND:") + sendStr);
         }else{
-          INFO_SERIAL.println("TCP send failed.");
+          INFO_SERIAL.println("UDP send failed.");
         }
       }
       sendStr = "";

@@ -127,7 +127,7 @@ void setup() {
 }
 
 void loop() {
-  //uart1から文字列を受信して、CRLFが来たら送信
+  //Serial Monitorから文字列を受信して、CRLFが来たら送信
   while(INFO_SERIAL.available() > 0){
     char c = (char)INFO_SERIAL.read();
     sendStr += c;
