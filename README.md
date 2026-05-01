@@ -274,6 +274,26 @@ AMWA-01 を STA モードで起動し、UDP 通信を行うサンプルです。
 AMWA_UDP_AP_DEMO と組み合わせて使用します。<br>
 シリアルモニタから入力した文字列を UDP 送信し、受信データを表示します。
 
+* **AMWA_TCP_SERVER_AP_DEMO**<br>
+AMWA-01 を AP モードで起動し、TCP server として動作するサンプルです。<br>
+AMWA_TCP_CLIENT_STA_DEMO と組み合わせて使用します。<br>
+シリアルモニタから入力した文字列を TCP 送信し、受信データを表示します。
+
+* **AMWA_TCP_CLIENT_STA_DEMO**<br>
+AMWA-01 を STA モードで起動し、TCP client として動作するサンプルです。<br>
+AMWA_TCP_SERVER_AP_DEMO と組み合わせて使用します。<br>
+シリアルモニタから入力した文字列を TCP 送信し、受信データを表示します。
+
+* **AMWA_TCP_CLIENT_AP_DEMO**<br>
+AMWA-01 を AP モードで起動し、TCP client として動作するサンプルです。<br>
+AMWA_TCP_SERVER_STA_DEMO と組み合わせて使用します。<br>
+シリアルモニタから入力した文字列を TCP 送信し、受信データを表示します。
+
+* **AMWA_TCP_SERVER_STA_DEMO**<br>
+AMWA-01 を STA モードで起動し、TCP server として動作するサンプルです。<br>
+AMWA_TCP_CLIENT_AP_DEMO と組み合わせて使用します。<br>
+シリアルモニタから入力した文字列を TCP 送信し、受信データを表示します。
+
 * **AMWA_AutoUDP_AP**<br>
 AMWA-01 を AP（アクセスポイント）モードで起動し、AutoUDP 通信を自動開始するサンプルです。<br>
 AMWA_AutoUDP_STA と組み合わせて使用します。<br>
