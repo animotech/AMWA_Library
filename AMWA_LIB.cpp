@@ -454,19 +454,15 @@ bool AMWA::auto_udp_set(uint16_t local_port, String remote_ip, uint16_t remote_p
   return waitResponce("OK", 1000).result;
 }
 
-/// @brief +UART_SWITCH:<baud> 検出時に呼ばれる callback を登録する
-/// @param cb  callback 関数ポインタ。NULL を渡すと解除。
-void AMWA::set_baud_switch_callback(BaudSwitchCallback cb){
-  baud_switch_cb = cb;
-}
-
-/// @brief AutoUDP 無効化
+/// @brief 不揮発メモリに保存する UART baudrate を設定する
 /// @return 正常終了時 true
 bool AMWA::baudrate_setting_set(int baudrate){
   AT_Send("+UARTW=", String(baudrate));
   return waitResponce("OK", 1000).result;
 }
 
+/// @brief 不揮発メモリに保存されている UART baudrate を取得する
+/// @return 保存されている baudrate。取得失敗時は -1
 int AMWA::baudrate_setting_get(void){
   AT_Send("+UARTW?", "");
   WaitResult res = waitResponce("+UARTW:", 1000, STARTWITH);
@@ -476,6 +472,8 @@ int AMWA::baudrate_setting_get(void){
   return res.restr.substring(7).toInt();
 }
 
+/// @brief AutoUDP 無効化
+/// @return 正常終了時 true
 bool AMWA::auto_udp_disable(){
   AT_Send("+SAUDP=", "0");
   return waitResponce("OK", 1000).result;
@@ -539,11 +537,6 @@ bool AMWA::wait_autoudp_started(unsigned long timeout_ms){
         String rcvstr = String(rcvbyte);
         // 行頭/行末の空白・改行コード（将来 \r\n 混在時の \n 残留など）を除去
         rcvstr.trim();
-
-          // 切替え直後に届く +SOPEN: や +RXD: を取りこぼす可能性がある。
-          cnt = 0;
-          continue;
-        }
 
         // 通常行: logon なら 1 行ぶんをまとめて echo してから判定
         if(logon){

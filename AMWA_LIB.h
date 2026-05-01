@@ -42,7 +42,6 @@ class AMWA
   bool logon;
   Stream* at_serial;
   Stream* log_serial;
-  void (*baud_switch_cb)(uint32_t new_baud) = nullptr;   // wait_autoudp_started 中の +UART_SWITCH 検出時に呼ばれる
   AMWA(bool on, Stream *amwa_serial,Stream *arduino_serial);
   void AT_Send(String atcmd,String para);
   bool ipaddr_set(String  ipaddr,String  subnet, String  gateway);
