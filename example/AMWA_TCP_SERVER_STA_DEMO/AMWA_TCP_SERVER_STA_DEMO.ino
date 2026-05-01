@@ -146,10 +146,10 @@ void loop() {
           continue;
         }
         if(sendStr.length() > 0){
-          if(wifihalow.UDP_Send(udpid,REMOTE_IP,REMOTE_PORT, sendStr )){
-          INFO_SERIAL.println(String("SEND:") + sendStr);
+          if(wifihalow.TCP_Send(connectedClientId, sendStr)){
+            INFO_SERIAL.println(String("SEND:") + sendStr);
           }else{
-            INFO_SERIAL.println("UDP send failed.");
+            INFO_SERIAL.println("TCP send failed.");
           }
         }
         sendStr = "";
