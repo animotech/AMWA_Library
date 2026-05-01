@@ -7,7 +7,7 @@
 #define SUBNET "225.255.255.0"
 #define GATEWAY "192.168.11.1"
 //アクセスポイント設定
-#define SSID "MegaChips"
+#define SSID "AMWx_AP"
 #define SEC "sae"
 #define PASS "12345678"
 //UDP設定

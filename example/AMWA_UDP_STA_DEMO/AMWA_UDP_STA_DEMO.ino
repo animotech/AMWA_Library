@@ -1,18 +1,53 @@
+/*
+ * AMWA_UDP_STA_DEMO
+ *
+ * AMWA-01 を STA モードで起動し、UDP 通信を行うサンプルです。
+ * 対向には AMWA_UDP_AP_DEMO を使用してください。
+ *
+ * 【役割】
+ *   - 自分: STA 側
+ *   - 相手: AP 側
+ *
+ * 【起動順】
+ *   1. AMWA_UDP_AP_DEMO を書き込んだ Arduino を先に起動
+ *   2. AP mode started. が表示されたことを確認
+ *   3. AMWA_UDP_STA_DEMO を書き込んだ Arduino を起動
+ *
+ * 【Serial Monitor 設定】
+ *   - baud rate: 115200
+ *   - line ending: CRLF
+ *
+ * 【IP / Port 対応表】
+ *   - STA local IP     : AMWA_IPADDR  = 192.168.11.12
+ *   - STA local port   : LOCAL_PORT   = 4098
+ *   - STA send to IP   : REMOTE_IP    = 192.168.11.12
+ *   - STA send to port : REMOTE_PORT  = 4105
+ *
+ *   - AP local IP      : 192.168.11.17
+ *   - AP local port    : 4098
+ *   - AP send to IP    : 192.168.11.17
+ *   - AP send to port  : 4105
+ *
+ * 【メモ】
+ *   - Serial Monitor から文字列を入力して CRLF を送ると UDP 送信します。
+ *   - RECV: に受信データ、SEND: に送信データを表示します。
+ */
+
 #include <AMWA_LIB.h>
 //シリアル設定
 #define AT_SERIAL  Serial1
 #define INFO_SERIAL Serial
 //IPアドレス設定
-#define AMWA_IPADDR "192.168.11.17"
-#define SUBNET "225.255.255.0"
+#define AMWA_IPADDR "192.168.11.12"
+#define SUBNET "255.255.255.0"
 #define GATEWAY "192.168.11.1"
 //アクセスポイント設定
-#define SSID "MegaChips"
+#define SSID "AMWx_AP"
 #define SEC "sae"
 #define PASS "12345678"
 //UDP設定
 #define LOCAL_PORT 4098
-#define REMOTE_IP "192.168.11.12"
+#define REMOTE_IP "192.168.11.17"
 #define REMOTE_PORT 4105
 
 AMWA wifihalow(false,&AT_SERIAL,&INFO_SERIAL);
@@ -33,44 +68,45 @@ void setup() {
   //STAモードに設定して保存し、再起動
   if(!wifihalow.mode_set("STA")){
     INFO_SERIAL.println("Failed to switch to STA mode.");
-    while(1){ delay(1000); }
+    NVIC_SystemReset();
   }
   if(!wifihalow.settings_save()){
     INFO_SERIAL.println("Failed to save STA mode.");
-    while(1){ delay(1000); }
+    NVIC_SystemReset();
   }
   INFO_SERIAL.println("Rebooting AMWA-01.");
   wifihalow.reboot();
-  delay(3000);
-
-  //アクセスポイント情報を設定
-  if(!wifihalow.sta_ap_set(SSID, SEC, PASS)){
-    INFO_SERIAL.println("Failed to set the Wi-Fi profile.");
-    while(1){ delay(1000); }
+  
+  //起動メッセージ待ち
+  AMWA::WaitResult res = wifihalow.waitResponce("FW_VERSION:",40000,STARTWITH);
+  if(!res.result){
+    INFO_SERIAL.println("Failed to start STA mode.");
+    NVIC_SystemReset();
   }
+  INFO_SERIAL.println("STA mode started.");
 
   //DHCPをOFF
   if(!wifihalow.dhcp_on(DHCP_DISABLE)){
     INFO_SERIAL.println("Failed to disable DHCP.");
-    while(1){ delay(1000); }
+    NVIC_SystemReset();
   }
   //IPアドレスを設定
   if(!wifihalow.ipaddr_set(AMWA_IPADDR, SUBNET, GATEWAY)){
     INFO_SERIAL.println("Failed to set IP address.");
-    while(1){ delay(1000); }
+    NVIC_SystemReset();
   }
   //受信モードをパッシブ、イベント無効に設定
   if(!wifihalow.recvmode_set(PASSIVEMODE,EVENT_DISABLE)){
     INFO_SERIAL.println("Failed to set receive mode.");
-    while(1){ delay(1000); }
+    NVIC_SystemReset();
   }
 
   //アクセスポイントに接続
   INFO_SERIAL.print("Connecting to Wi-Fi: ");
   INFO_SERIAL.println(SSID);
-  if(!wifihalow.wifiConnect(SSID, SEC, PASS, 50000)){
+  if(!wifihalow.wifiConnect(SSID, SEC, PASS, 60000)){
     INFO_SERIAL.println("Connection failed.");
-    while(1){ delay(1000); }
+    NVIC_SystemReset();
   }
   INFO_SERIAL.println("Connected successfully.");
   
@@ -83,7 +119,7 @@ void setup() {
     INFO_SERIAL.println(udpid);
   }else{
     INFO_SERIAL.println("Failed to open socket.");
-    while(1){ delay(1000); }
+    NVIC_SystemReset();
   }
 }
 
@@ -93,18 +129,12 @@ void loop() {
     char c = (char)INFO_SERIAL.read();
     sendStr += c;
     if(sendStr.endsWith("\r\n")){
-        sendStr.remove(sendStr.length() - 2);
-        if(sendStr.length() > 0){
-          if(sendStr == "AT*"){
-            INFO_SERIAL.println("Restarting Arduino.");
-            delay(100);
-            NVIC_SystemReset();
-          }else{
-            if(wifihalow.UDP_Send(udpid,REMOTE_IP,REMOTE_PORT, sendStr )){
-            INFO_SERIAL.println(String("SEND:") + sendStr);
-          }else{
-            INFO_SERIAL.println("UDP send failed.");
-          }
+      sendStr.remove(sendStr.length() - 2);
+      if(sendStr.length() > 0){
+        if(wifihalow.UDP_Send(udpid,REMOTE_IP,REMOTE_PORT, sendStr )){
+        INFO_SERIAL.println(String("SEND:") + sendStr);
+        }else{
+          INFO_SERIAL.println("UDP send failed.");
         }
       }
       sendStr = "";
