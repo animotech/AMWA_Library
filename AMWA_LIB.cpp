@@ -175,7 +175,7 @@ int AMWA::UDP_Open(uint16_t port){
   int id = 0;
   String para = "udp," + String(port);
   AT_Send("+SOPEN=",para);
-  WaitResult res= waitResponce("+SOPEN:",1000,STARTWITH);
+  WaitResult res= waitResponce("+SOPEN:",3000,STARTWITH);
   if(res.result){
     //OKだった場合、idを取得
     String idstr = res.restr.substring(7);
@@ -208,7 +208,7 @@ int AMWA::TCP_Server_Open(uint16_t port){
   int id = 0;
   String para = "tcp," + String(port) + ",1";
   AT_Send("+SOPEN=",para);
-  WaitResult res= waitResponce("+SOPEN:",1000,STARTWITH);
+  WaitResult res= waitResponce("+SOPEN:",3000,STARTWITH);
   if(res.result){
     //OKだった場合、idを取得
     String idstr = res.restr.substring(7);
@@ -228,7 +228,7 @@ int AMWA::TCP_Client_Open(String ipaddr, uint16_t port){
   String idstr = "";
   String para = "tcp," + ipaddr +","+ String(port) + ",1";
   AT_Send("+SOPEN=",para);
-  WaitResult res= waitResponce("+SOPEN:",1000,STARTWITH);
+  WaitResult res= waitResponce("+SOPEN:",3000,STARTWITH);
   if(res.result){
     //OKだった場合、idを取得
     idstr = res.restr.substring(7);
@@ -238,7 +238,7 @@ int AMWA::TCP_Client_Open(String ipaddr, uint16_t port){
     id = -1;
     return id;
   }
-  res= waitResponce("+SEVENT:CONNECT,"+idstr,1000,STARTWITH);
+  res= waitResponce("+SEVENT:CONNECT,"+idstr,2000,STARTWITH);
   if(res.result){
     ;
   }else{

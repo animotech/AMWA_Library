@@ -138,7 +138,7 @@ void loop() {
         continue;
       }
       if(sendStr.length() > 0){
-        if(wifihalow.TCP_Send(connectedClientId, sendStr)){
+        if(wifihalow.TCP_Send(tcpcid, sendStr)){
           INFO_SERIAL.println(String("SEND:") + sendStr);
         }else{
           INFO_SERIAL.println("TCP send failed.");
