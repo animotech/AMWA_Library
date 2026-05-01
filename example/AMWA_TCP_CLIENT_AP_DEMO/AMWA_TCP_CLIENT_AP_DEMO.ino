@@ -98,16 +98,6 @@ void setup() {
     INFO_SERIAL.println("Failed to set receive mode.");
     NVIC_SystemReset();
   }
-
-  // STA接続待ち
-  INFO_SERIAL.println("Waiting for station connection.");
-  res = wifihalow.waitResponce("+WEVENT:STA_CONNECTED",10000,STARTWITH);
-  if(!res.result){
-    INFO_SERIAL.println("Station connection was not detected.");
-    NVIC_SystemReset();
-  }
-  INFO_SERIAL.println("Station connected.");
-
 }
 
 void loop() {
@@ -159,6 +149,7 @@ void loop() {
     INFO_SERIAL.println(rcvStr);
   }else if(rlen == -1){
     INFO_SERIAL.println("Disconnected from server.");
+    wifihalow.Socket_Close(tcpcid);
     tcpcid = -1;
   }
   delay(100);

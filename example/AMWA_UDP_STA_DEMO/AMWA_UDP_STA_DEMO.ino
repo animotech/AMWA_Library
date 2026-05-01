@@ -20,13 +20,13 @@
  * 【IP / Port 対応表】
  *   - STA local IP     : AMWA_IPADDR  = 192.168.11.12
  *   - STA local port   : LOCAL_PORT   = 4098
- *   - STA send to IP   : REMOTE_IP    = 192.168.11.12
+ *   - STA send to IP   : REMOTE_IP    = 192.168.11.17
  *   - STA send to port : REMOTE_PORT  = 4105
  *
  *   - AP local IP      : 192.168.11.17
- *   - AP local port    : 4098
- *   - AP send to IP    : 192.168.11.17
- *   - AP send to port  : 4105
+ *   - AP local port    : 4105
+ *   - AP send to IP    : 192.168.11.12
+ *   - AP send to port  : 4098
  *
  * 【メモ】
  *   - Serial Monitor から文字列を入力して CRLF を送ると UDP 送信します。

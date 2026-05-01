@@ -159,6 +159,7 @@ void loop() {
     INFO_SERIAL.println(rcvStr);
   }else if(rlen == -1){
     INFO_SERIAL.println("Disconnected from server.");
+    wifihalow.Socket_Close(tcpcid);
     tcpcid = -1;
   }
   delay(100);

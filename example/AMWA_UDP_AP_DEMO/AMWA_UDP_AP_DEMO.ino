@@ -19,13 +19,13 @@
  *
  * 【IP / Port 対応表】
  *   - AP local IP      : AMWA_IPADDR  = 192.168.11.17
- *   - AP local port    : LOCAL_PORT   = 4098
- *   - AP send to IP    : REMOTE_IP    = 192.168.11.17
- *   - AP send to port  : REMOTE_PORT  = 4105
+ *   - AP local port    : LOCAL_PORT   = 4105
+ *   - AP send to IP    : REMOTE_IP    = 192.168.11.12
+ *   - AP send to port  : REMOTE_PORT  = 4098
  *
  *   - STA local IP     : 192.168.11.12
  *   - STA local port   : 4098
- *   - STA send to IP   : 192.168.11.12
+ *   - STA send to IP   : 192.168.11.17
  *   - STA send to port : 4105
  *
  * 【メモ】
