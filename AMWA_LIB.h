@@ -98,6 +98,8 @@ class AMWA
   /// @note  callback を **登録しないまま** AutoUDP で baud 切替を使うと、
   ///        chip だけが新 baud になり host は旧 baud のまま残るため通信不能になる。
   ///        AutoUDP で 115200 以外を使う場合は必ず登録すること。
+  bool baudrate_setting_set(int baudrate);                                        // AT+UARTW=<baud>
+  int baudrate_setting_get(void);                                                 // AT+UARTW?
   typedef void (*BaudSwitchCallback)(uint32_t new_baud);
   void set_baud_switch_callback(BaudSwitchCallback cb);
 

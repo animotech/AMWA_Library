@@ -210,6 +210,23 @@ AMWA-01 を再起動する関数です。(ATZコマンド)<br>
 ATZ は応答せず即チップリセットされるため、応答待ちはしません。<br>
 引数・返り値ともになし<br>
 
+* **bool baudrate_setting_set(int baudrate)**<br>
+不揮発メモリに保存する UART baudrate を設定する関数です。(AT+UARTW コマンド)<br>
+この設定は即時反映されず、保存設定だけが更新されます。<br>
+引数<br>
+・int baudrate : 保存する baudrate<br>
+戻り値<br>
+・bool : 正常終了したら true
+
+* **int baudrate_setting_get(void)**<br>
+不揮発メモリに保存されている UART baudrate を取得する関数です。(AT+UARTW? コマンド)<br>
+引数<br>
+・なし<br>
+戻り値<br>
+・int : 保存されている baudrate、取得失敗時は -1
+
+注意点: 不揮発メモリへ書き込むと寿命が減るため、`baudrate_setting_set()` は何度も繰り返し書き込みすぎないようにしてください。<br>
+
 * **bool auto_udp_set(uint16_t local_port, String remote_ip, uint16_t remote_port)**<br>
 AutoUDP を有効化する関数です。(AT+SAUDPコマンド)<br>
 設定は settings_save() で保存後、reboot() で次回起動から AutoUDP モードが動作します。<br>

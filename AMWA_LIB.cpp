@@ -462,6 +462,20 @@ void AMWA::set_baud_switch_callback(BaudSwitchCallback cb){
 
 /// @brief AutoUDP 無効化
 /// @return 正常終了時 true
+bool AMWA::baudrate_setting_set(int baudrate){
+  AT_Send("+UARTW=", String(baudrate));
+  return waitResponce("OK", 1000).result;
+}
+
+int AMWA::baudrate_setting_get(void){
+  AT_Send("+UARTW?", "");
+  WaitResult res = waitResponce("+UARTW:", 1000, STARTWITH);
+  if(!res.result){
+    return -1;
+  }
+  return res.restr.substring(7).toInt();
+}
+
 bool AMWA::auto_udp_disable(){
   AT_Send("+SAUDP=", "0");
   return waitResponce("OK", 1000).result;
