@@ -5,7 +5,7 @@
 
 // IPアドレス設定
 static String LOCAL_IP = "192.168.1.24";
-static String SUBNET = "225.255.255.0";
+static String SUBNET = "255.255.255.0";
 static String GATEWAY = "192.168.1.1";
 // アクセスポイント設定
 static String SSID = "cs_11ah_ap";

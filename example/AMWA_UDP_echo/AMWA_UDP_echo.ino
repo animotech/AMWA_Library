@@ -4,7 +4,7 @@
 #define INFO_SERIAL Serial
 //IPアドレス設定
 #define AMWA_IPADDR "192.168.11.12"
-#define SUBNET "225.255.255.0"
+#define SUBNET "255.255.255.0"
 #define GATEWAY "192.168.11.1"
 //アクセスポイント設定
 #define SSID "AMWx_AP"

@@ -19,11 +19,6 @@
 #define  DHCP_DISABLE 0
 #define  DHCP_ENABLE 1
 
-// AutoUDP 受信出力形式
-#define  AUTOUDP_RX_FORMAT_HEADER 0
-#define  AUTOUDP_RX_FORMAT_RAW 1
-
-
 using namespace std;
 class AMWA
 {
@@ -78,11 +73,7 @@ class AMWA
   void reboot();                                                                  // ATZ（応答待ちなし、チップリセット）
 
   // ---- AutoUDP 制御 ----
-  bool auto_udp_set(uint16_t local_port, String remote_ip, uint16_t remote_port); // AT+SAUDP=1,...（常に有効化、baud は変更しない）
-  bool auto_udp_set(uint16_t local_port, String remote_ip, uint16_t remote_port,
-                    uint32_t baud);                                               // AT+SAUDP=1,...,baud（baud も保存）
-  bool auto_udp_set(uint16_t local_port, String remote_ip, uint16_t remote_port,
-                    uint32_t baud, uint8_t rx_format);                            // AT+SAUDP=1,...,baud,rx_format（受信出力形式も保存）
+  bool auto_udp_set(uint16_t local_port, String remote_ip, uint16_t remote_port); // AT+SAUDP=1,...（port は 1..65535）
   bool auto_udp_disable();                                                        // AT+SAUDP=0
   bool auto_udp_escape(unsigned long timeout_ms);                                 // AutoUDP モード起動直後に AT* で抜ける
 

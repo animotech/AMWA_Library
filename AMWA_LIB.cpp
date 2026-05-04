@@ -419,37 +419,15 @@ void AMWA::reboot(){
 }
 
 /// @brief AutoUDP 設定（常に有効化）
-/// @param local_port  ローカルポート
+/// @param local_port  ローカルポート (1..65535)
 /// @param remote_ip   リモート IP アドレス
-/// @param remote_port リモートポート
+/// @param remote_port リモートポート (1..65535)
 /// @return 正常終了時 true
 bool AMWA::auto_udp_set(uint16_t local_port, String remote_ip, uint16_t remote_port){
+  if(local_port == 0 || remote_port == 0){
+    return false;
+  }
   String para = "1," + String(local_port) + "," + remote_ip + "," + String(remote_port);
-  AT_Send("+SAUDP=", para);
-  return waitResponce("OK", 1000).result;
-}
-
-/// @brief AutoUDP 設定 (5 引数版)。AutoUDP 突入時に切替える UART baud も保存する
-/// @param local_port  ローカルポート
-/// @param remote_ip   リモート IP アドレス
-/// @param remote_port リモートポート
-/// @param baud        AutoUDP 突入時に切替える UART baud (9600〜921600)
-/// @return 正常終了時 true
-bool AMWA::auto_udp_set(uint16_t local_port, String remote_ip, uint16_t remote_port, uint32_t baud){
-  String para = "1," + String(local_port) + "," + remote_ip + "," + String(remote_port) + "," + String(baud);
-  AT_Send("+SAUDP=", para);
-  return waitResponce("OK", 1000).result;
-}
-
-/// @brief AutoUDP 設定 (6 引数版)。UART baud と AutoUDP 受信出力形式も保存する
-/// @param local_port  ローカルポート
-/// @param remote_ip   リモート IP アドレス
-/// @param remote_port リモートポート
-/// @param baud        AutoUDP 突入時に切替える UART baud (9600〜921600)
-/// @param rx_format   AUTOUDP_RX_FORMAT_HEADER: +RXD header + payload / AUTOUDP_RX_FORMAT_RAW: payload only
-/// @return 正常終了時 true
-bool AMWA::auto_udp_set(uint16_t local_port, String remote_ip, uint16_t remote_port, uint32_t baud, uint8_t rx_format){
-  String para = "1," + String(local_port) + "," + remote_ip + "," + String(remote_port) + "," + String(baud) + "," + String(rx_format);
   AT_Send("+SAUDP=", para);
   return waitResponce("OK", 1000).result;
 }
