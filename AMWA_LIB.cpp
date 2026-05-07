@@ -274,7 +274,7 @@ bool AMWA::Socket_Close(uint16_t id){
 
 /// @brief ソケット受信バイト取得 SRECV?コマンド
 /// @param id socket id
-/// @return 0以上:受信バイト数 -1:指定ソケットなし
+/// @return 0以上:受信バイト数 -1:指定ソケットなし/応答タイムアウト
 int AMWA::available(int id){
   AT_Send("+SRECV?","");
   WaitResult res= waitResponce("+SRECV:" +String(id),1000,STARTWITH);
@@ -284,6 +284,14 @@ int AMWA::available(int id){
   }
   String numstr= res.restr.substring(9);
   return numstr.toInt();
+}
+
+/// @brief socketリスト取得 SLIST?コマンド
+/// @param id socket id
+/// @return 0以上:指定ソケットあり -1:指定ソケットなし
+bool AMWA::socket_exists(int id){
+  AT_Send("+SLIST?","");
+  return waitResponce("+SLIST:" + String(id), 3000, STARTWITH).result;
 }
 
 String AMWA::passive_recv(int id,int len){

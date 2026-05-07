@@ -168,9 +168,10 @@ void loop() {
       INFO_SERIAL.println(rcvStr);
     }else if(rlen == -1){
       // 切断されたら接続待ちへ戻る
-      wifihalow.Socket_Close(connectedClientId);
-      connectedClientId = -1;
-      INFO_SERIAL.println("Client disconnected.");
+      if(!wifihalow.socket_exists(connectedClientId)){
+        connectedClientId = -1;
+        INFO_SERIAL.println("Client disconnected.");
+      }
     }
     delay(100);
   }

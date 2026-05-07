@@ -53,6 +53,7 @@ class AMWA
   bool TCP_Send(int id, String  sendstr);
 
   bool Socket_Close(uint16_t id);
+  bool socket_exists(int id);
   int available(int id);
   String passive_recv(int id,int len);
   bool recvmode_set(int mode,int event);

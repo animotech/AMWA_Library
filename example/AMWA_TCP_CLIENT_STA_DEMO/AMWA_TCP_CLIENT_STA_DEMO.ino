@@ -164,9 +164,10 @@ void loop() {
     INFO_SERIAL.print("RECV:");
     INFO_SERIAL.println(rcvStr);
   }else if(rlen == -1){
-    INFO_SERIAL.println("Disconnected from server.");
-    wifihalow.Socket_Close(tcpcid);
-    tcpcid = -1;
+    if(!wifihalow.socket_exists(tcpcid)){
+      INFO_SERIAL.println("Disconnected from server.");
+      tcpcid = -1;
+    }
   }
   delay(100);
 }

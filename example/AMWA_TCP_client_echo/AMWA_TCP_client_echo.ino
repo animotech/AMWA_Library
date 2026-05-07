@@ -103,7 +103,9 @@ void loop() {
       }
       else if(rlen == -1)
       {
-        tcpConnectedid=-1;
+        if(!wifihalow.socket_exists(tcpcid)){
+          tcpConnectedid=-1;
+        }
       }
   }
 

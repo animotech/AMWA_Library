@@ -108,8 +108,10 @@ void loop() {
     }
     else if (rlen == -1)
     {
-      connectedClientId = -1;
-      INFO_SERIAL.println("client disconnected. wait for client connection.");
+      if(!wifihalow.socket_exists(connectedClientId)){
+        connectedClientId = -1;
+        INFO_SERIAL.println("client disconnected. wait for client connection.");
+      }
     }
     delay(100);
   }
