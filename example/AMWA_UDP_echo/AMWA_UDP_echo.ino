@@ -4,10 +4,10 @@
 #define INFO_SERIAL Serial
 //IPアドレス設定
 #define AMWA_IPADDR "192.168.11.12"
-#define SUBNET "225.255.255.0"
+#define SUBNET "255.255.255.0"
 #define GATEWAY "192.168.11.1"
 //アクセスポイント設定
-#define SSID "MegaChips"
+#define SSID "AMWx_AP"
 #define SEC "sae"
 #define PASS "12345678"
 //UDP設定
@@ -20,7 +20,6 @@ AMWA wifihalow(false,&AT_SERIAL,&INFO_SERIAL);
 int udpid;
 
 void setup() {
-  string restr;
   bool init_finish=false;;
   INFO_SERIAL.begin(115200);
   AT_SERIAL.begin(115200);

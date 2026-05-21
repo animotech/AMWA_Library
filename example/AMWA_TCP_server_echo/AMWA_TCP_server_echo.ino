@@ -4,7 +4,7 @@
 #define INFO_SERIAL Serial
 //IPアドレス設定
 #define AMWA_IPADDR "192.168.1.24"
-#define SUBNET "225.255.255.0"
+#define SUBNET "255.255.255.0"
 #define GATEWAY "192.168.1.1"
 //アクセスポイント設定
 #define SSID "cs_11ah_ap"
@@ -19,7 +19,6 @@ int tcpsid;
 int connectedClientId = -1;
 
 void setup() {
-  string restr;
   bool init_finish=false;
   INFO_SERIAL.begin(115200);
   AT_SERIAL.begin(115200);
@@ -109,8 +108,10 @@ void loop() {
     }
     else if (rlen == -1)
     {
-      connectedClientId = -1;
-      INFO_SERIAL.println("client disconnected. wait for client connection.");
+      if(!wifihalow.socket_exists(connectedClientId)){
+        connectedClientId = -1;
+        INFO_SERIAL.println("client disconnected. wait for client connection.");
+      }
     }
     delay(100);
   }
