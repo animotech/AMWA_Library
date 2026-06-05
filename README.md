@@ -1,4 +1,4 @@
-# AMWA-01用Arduinoライブラリ<!-- omit in toc -->
+﻿# AMWA-01用Arduinoライブラリ<!-- omit in toc -->
 
 ## 目次<!-- omit in toc -->
 
@@ -72,7 +72,7 @@ AMWA-01 をハードウェアリセットする関数です。<br>
 返り値<br>
 ・なし<br>
 
-* **WaitResult waitResponce(String res, int timeout_ms, int mode=ALLMATCH)**<br>
+* **WaitResult waitResponse(String res, int timeout_ms, int mode=ALLMATCH)**<br>
 AMWA-01からのUARTレスポンスを待つ関数です。<br>
 引数<br>
 ・String res : 待ちたいレスポンス文字列<br>
@@ -297,6 +297,10 @@ AT_Send関数を使用してUDPエコーを行うサンプルです。
 AMWA-01との通信に使用するUARTと、シリアルモニタに使用するUARTをソフト的に直接接続します。<br>
 シリアルモニタから直接ATコマンド操作ができるようになります。
 
+* **AMWA_BaudTest**<br>
+AMWA-01 の UART baud 設定に対する応答性を確認するサンプルです。<br>
+`AT` と `AT+SAUDP?` を送信し、各 baud rate での timeout / 不一致回数を集計します。
+
 * **AMWA_TCP_client_echo**<br>
 AMWA-01がTCPクライアントになり、指定したTCPサーバーから受信したデータをエコーします。
 
@@ -315,6 +319,16 @@ AMWA_UDP_STA_DEMO と組み合わせて使用します。<br>
 AMWA-01 を STA モードで起動し、UDP 通信を行うサンプルです。<br>
 AMWA_UDP_AP_DEMO と組み合わせて使用します。<br>
 シリアルモニタから入力した文字列を UDP 送信し、受信データを表示します。
+
+* **AMWA_AUTOUDP_AP_DEMO**<br>
+AMWA-01 を AP モード + AutoUDP で起動するサンプルです。<br>
+AMWA_AUTOUDP_STA_DEMO と組み合わせて使用します。<br>
+シリアルモニタ入力を AutoUDP 送信し、受信データを表示します。
+
+* **AMWA_AUTOUDP_STA_DEMO**<br>
+AMWA-01 を STA モード + AutoUDP で起動するサンプルです。<br>
+AMWA_AUTOUDP_AP_DEMO と組み合わせて使用します。<br>
+シリアルモニタ入力を AutoUDP 送信し、受信データを表示します。
 
 * **AMWA_TCP_SERVER_AP_DEMO**<br>
 AMWA-01 を AP モードで起動し、TCP server として動作するサンプルです。<br>

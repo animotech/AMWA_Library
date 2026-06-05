@@ -1,4 +1,4 @@
-/*
+﻿/*
  * AMWA_BaudTest
  *
  * UART baud reliability sample for AMWA-01 and Arduino.
@@ -79,7 +79,7 @@ static bool sendCommandWaitOK(const char *command, unsigned long timeout_ms) {
   AT_SERIAL.print('\r');
   AT_SERIAL.flush();
 
-  AMWA::WaitResult r = wifihalow.waitResponce("OK", timeout_ms);
+  AMWA::WaitResult r = wifihalow.waitResponse("OK", timeout_ms);
   return r.result;
 }
 
@@ -93,7 +93,7 @@ static bool switchBaud(unsigned long baud) {
   AT_SERIAL.print('\r');
   AT_SERIAL.flush();
 
-  AMWA::WaitResult r = wifihalow.waitResponce("OK", 1000);
+  AMWA::WaitResult r = wifihalow.waitResponse("OK", 1000);
   if (!r.result) {
     INFO_SERIAL.println("FAILED");
     return false;
@@ -242,3 +242,4 @@ void setup() {
 void loop() {
   // This sample runs once in setup().
 }
+

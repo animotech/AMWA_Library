@@ -1,4 +1,4 @@
-#include <AMWA_LIB.h>
+﻿#include <AMWA_LIB.h>
 //シリアル設定
 #define AT_SERIAL  Serial1
 #define INFO_SERIAL Serial
@@ -76,7 +76,7 @@ void loop() {
   if (connectedClientId == -1)
   {
     //tcp client 接続確認
-    AMWA::WaitResult res = wifihalow.waitResponce("+SEVENT:CONNECT,", 1000, STARTWITH);
+    AMWA::WaitResult res = wifihalow.waitResponse("+SEVENT:CONNECT,", 1000, STARTWITH);
     if (res.result)
     {
       // OKだった場合、idを取得

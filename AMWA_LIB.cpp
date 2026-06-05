@@ -1,8 +1,222 @@
-
+﻿
 #include <AMWA_LIB.h>
 #define TERM '\r'
 #define AMWA_RESET_pin 9
-#define  RESBUFSIZE 256
+#define  RESBUFSIZE 1024
+
+namespace {
+
+class ByteFifo {
+private:
+  static const size_t CAPACITY = 4096;
+  uint8_t buf[CAPACITY];
+  size_t head;
+  size_t tail;
+
+public:
+  ByteFifo() : head(0), tail(0) {}
+
+  void clear() {
+    head = 0;
+    tail = 0;
+  }
+
+  bool isEmpty() const {
+    return head == tail;
+  }
+
+  bool isFull() const {
+    return ((head + 1) % CAPACITY) == tail;
+  }
+
+  bool push(uint8_t b) {
+    if (isFull()) {
+      return false;
+    }
+    buf[head] = b;
+    head = (head + 1) % CAPACITY;
+    return true;
+  }
+
+  size_t peekContiguous(const uint8_t *&ptr) const {
+    if (isEmpty()) {
+      ptr = nullptr;
+      return 0;
+    }
+    ptr = &buf[tail];
+    if (head > tail) {
+      return head - tail;
+    }
+    return CAPACITY - tail;
+  }
+
+  void drop(size_t n) {
+    if (n == 0) {
+      return;
+    }
+    tail = (tail + n) % CAPACITY;
+  }
+};
+
+struct BridgeContext {
+  AMWA *owner;
+  ByteFifo atToLog;
+  bool awaitingAtResponse;
+  bool atBlockReady;
+  size_t atBufferedBytes;
+  unsigned long lastAtRxMs;
+};
+
+BridgeContext g_bridgeContexts[4] = {
+  {nullptr, ByteFifo(), false, false, 0, 0},
+  {nullptr, ByteFifo(), false, false, 0, 0},
+  {nullptr, ByteFifo(), false, false, 0, 0},
+  {nullptr, ByteFifo(), false, false, 0, 0}
+};
+
+BridgeContext &getBridgeContext(AMWA *owner) {
+  for (size_t i = 0; i < 4; i++) {
+    if (g_bridgeContexts[i].owner == owner) {
+      return g_bridgeContexts[i];
+    }
+  }
+
+  for (size_t i = 0; i < 4; i++) {
+    if (g_bridgeContexts[i].owner == nullptr) {
+      g_bridgeContexts[i].owner = owner;
+      g_bridgeContexts[i].atToLog.clear();
+      g_bridgeContexts[i].awaitingAtResponse = false;
+      g_bridgeContexts[i].atBlockReady = false;
+      g_bridgeContexts[i].atBufferedBytes = 0;
+      g_bridgeContexts[i].lastAtRxMs = 0;
+      return g_bridgeContexts[i];
+    }
+  }
+
+  // スロットを使い切った場合は先頭スロットを再利用
+  g_bridgeContexts[0].owner = owner;
+  g_bridgeContexts[0].atToLog.clear();
+  g_bridgeContexts[0].awaitingAtResponse = false;
+  g_bridgeContexts[0].atBlockReady = false;
+  g_bridgeContexts[0].atBufferedBytes = 0;
+  g_bridgeContexts[0].lastAtRxMs = 0;
+  return g_bridgeContexts[0];
+}
+
+// ブリッジ転送の既定パラメータ
+// - CHUNK/BUDGET: 1 回の処理量上限
+// - *_GAP_MS: 区切り欠落時の時間ベース救済
+// - *_BYTES: 区切り欠落時のサイズベース救済
+static const size_t BRIDGE_LOG_CHUNK_MAX = 256;
+static const int BRIDGE_LOG_TO_AT_BUDGET = 64;
+static const unsigned long BRIDGE_RESPONSE_GAP_MS = 12;
+static const unsigned long BRIDGE_FORCED_FLUSH_GAP_MS = 20;
+static const size_t BRIDGE_FORCED_FLUSH_BYTES = 128;
+
+static void bridge_read_from_at(Stream *atSerial, BridgeContext &ctx) {
+  // AT 側受信を最優先で吸い上げる。
+  // ブロック確定条件は以下:
+  // 1) CR/LF を受信
+  // 2) 一定量( BRIDGE_FORCED_FLUSH_BYTES ) 以上を受信
+  while (atSerial->available() > 0 && !ctx.atToLog.isFull()) {
+    int c = atSerial->read();
+    if (c >= 0) {
+      uint8_t b = (uint8_t)c;
+      ctx.atToLog.push(b);
+      ctx.atBufferedBytes++;
+      ctx.awaitingAtResponse = true;
+      ctx.lastAtRxMs = millis();
+      // FWや分断条件により CR 欠落/LF 単独になるケースを許容
+      if (b == TERM || b == '\n') {
+        ctx.atBlockReady = true;
+      }
+      // 区切り文字なしで連続流入する場合でも一定量で出力を進める
+      if (ctx.atBufferedBytes >= BRIDGE_FORCED_FLUSH_BYTES) {
+        ctx.atBlockReady = true;
+      }
+    }
+  }
+
+  // CR が取りこぼされた場合に備え、FIFO満杯時は強制的に1ブロック扱いにする
+  if (ctx.atToLog.isFull()) {
+    ctx.atBlockReady = true;
+  }
+}
+
+static void bridge_force_block_on_idle(BridgeContext &ctx) {
+  // 区切り文字欠落で atBlockReady が立たないまま溜まり続けるのを防ぐ
+  if (!ctx.atBlockReady && !ctx.atToLog.isEmpty()) {
+    if ((millis() - ctx.lastAtRxMs) > BRIDGE_FORCED_FLUSH_GAP_MS) {
+      ctx.atBlockReady = true;
+    }
+  }
+}
+
+static size_t bridge_flush_block_to_stream(Stream *outSerial, BridgeContext &ctx, size_t maxChunk) {
+  // 確定済みブロックを指定Streamへ送信（out 側が詰まっている時は途中で抜ける）
+  if (!ctx.atBlockReady) {
+    return 0;
+  }
+
+  size_t totalSent = 0;
+
+  while (!ctx.atToLog.isEmpty()) {
+    int room = outSerial->availableForWrite();
+    if (room <= 0) {
+      break;
+    }
+
+    const uint8_t *ptr;
+    size_t contiguous = ctx.atToLog.peekContiguous(ptr);
+    if (contiguous == 0) {
+      break;
+    }
+
+    size_t n = contiguous;
+    if (n > (size_t)room) {
+      n = (size_t)room;
+    }
+    if (n > maxChunk) {
+      n = maxChunk;
+    }
+
+    size_t sent = outSerial->write(ptr, n);
+    if (sent == 0) {
+      break;
+    }
+    ctx.atToLog.drop(sent);
+    totalSent += sent;
+  }
+
+  if (ctx.atToLog.isEmpty()) {
+    ctx.atBlockReady = false;
+    ctx.atBufferedBytes = 0;
+  }
+
+  return totalSent;
+}
+
+static bool bridge_should_wait_response(BridgeContext &ctx) {
+  // 応答待ちが終わる条件:
+  // 1) CR終端ブロック送信が完了している
+  // 2) FIFOが空
+  if (!ctx.awaitingAtResponse) {
+    return false;
+  }
+
+  if (!ctx.atBlockReady && ctx.atToLog.isEmpty()) {
+    // 行間で次の応答が続くケースを吸収するため、短い無通信ギャップは待機を維持する
+    if ((millis() - ctx.lastAtRxMs) <= BRIDGE_RESPONSE_GAP_MS) {
+      return true;
+    }
+    ctx.awaitingAtResponse = false;
+    return false;
+  }
+
+  return true;
+}
+
+} // namespace
 
 /// @brief コンストラクタ
 /// @param on レスポンス待ち中に受信したシリアルデータを表示するかどうか
@@ -10,6 +224,98 @@ AMWA::AMWA(bool on, Stream *amwa_serial,Stream *arduino_serial){
   logon = on;
   at_serial = amwa_serial;
   log_serial = arduino_serial;
+  log_line_buf.reserve(128);
+}
+
+void AMWA::at_receive_begin(){
+  // AT受信側内部状態を初期化
+  BridgeContext &ctx = getBridgeContext(this);
+  ctx.atToLog.clear();
+  ctx.awaitingAtResponse = false;
+  ctx.atBlockReady = false;
+  ctx.atBufferedBytes = 0;
+  ctx.lastAtRxMs = 0;
+}
+
+void AMWA::log_receive_line_begin(size_t reserveLen){
+  log_line_buf = "";
+  if (reserveLen > 0) {
+    log_line_buf.reserve(reserveLen);
+  }
+}
+
+bool AMWA::log_receive_line(String &outLine, size_t maxLen, int budget){
+  if (budget <= 0) {
+    budget = BRIDGE_LOG_TO_AT_BUDGET;
+  }
+
+  while (budget-- > 0 && log_serial->available() > 0) {
+    int c = log_serial->read();
+    if (c < 0) {
+      continue;
+    }
+
+    log_line_buf += (char)c;
+
+    if (log_line_buf.endsWith("\r\n")) {
+      outLine = log_line_buf;
+      outLine.remove(outLine.length() - 2);
+      log_line_buf = "";
+      if (outLine.length() > maxLen) {
+        outLine = "";
+      }
+      return true;
+    }
+
+    if (log_line_buf.length() > (maxLen + 2)) {
+      // CRLF未到達のまま上限超過した入力は破棄
+      log_line_buf = "";
+      outLine = "";
+      return true;
+    }
+  }
+
+  return false;
+}
+
+void AMWA::at_receive_poll(){
+  // AT受信を内部FIFOへ取り込む
+  BridgeContext &ctx = getBridgeContext(this);
+  bridge_read_from_at(at_serial, ctx);
+}
+
+size_t AMWA::at_output_block(Stream &out, size_t maxChunk){
+  // CR終端でまとまった応答を指定出力へ吐き出す
+  BridgeContext &ctx = getBridgeContext(this);
+  bridge_force_block_on_idle(ctx);
+  if (maxChunk == 0) {
+    maxChunk = BRIDGE_LOG_CHUNK_MAX;
+  }
+  return bridge_flush_block_to_stream(&out, ctx, maxChunk);
+}
+
+bool AMWA::at_receive_waiting_response(){
+  // 応答処理中なら true
+  BridgeContext &ctx = getBridgeContext(this);
+  return bridge_should_wait_response(ctx);
+}
+
+void AMWA::at_send_byte(uint8_t b){
+  BridgeContext &ctx = getBridgeContext(this);
+  at_serial->write(b);
+  ctx.awaitingAtResponse = true;
+}
+
+size_t AMWA::at_send_bytes(const uint8_t *data, size_t len){
+  if (data == nullptr || len == 0) {
+    return 0;
+  }
+  BridgeContext &ctx = getBridgeContext(this);
+  size_t sent = at_serial->write(data, len);
+  if (sent > 0) {
+    ctx.awaitingAtResponse = true;
+  }
+  return sent;
 }
 
 /// @brief AMWA-01 をハードウェアリセットする
@@ -46,14 +352,14 @@ void AMWA::AT_Send(String  atcmd,String  para){
 bool AMWA::ipaddr_set(String  ipaddr,String  subnet, String  gateway){
   String  para =ipaddr + "," + subnet + "," + gateway;
   AT_Send("+WIPADDR=",para);
-  return waitResponce("OK" ,1000).result;
+  return waitResponse("OK" ,1000).result;
 }
 /// @brief DHCPをONOFF設定
 /// @param enable DHCP_DISABLE or DHCP_ENABLE
 /// @return 正常終了時　true
 bool AMWA::dhcp_on(int enable){
   AT_Send("+WDHCP=",String(enable));
-  return waitResponce("OK" ,1000).result;
+  return waitResponse("OK" ,1000).result;
 }
 
 /// @brief 指定文字列待ち受け
@@ -61,32 +367,33 @@ bool AMWA::dhcp_on(int enable){
 /// @param timeout_ms   タイムアウト[mesec]
 /// @param mode       //ALLMATCH:全て一致、STARTWITH:前方一致、ENDWITH:後方一致
 /// @return      {結果, 受信した文字列またはTIMEOUT}
-AMWA::WaitResult AMWA::waitResponce(String res, int timeout_ms ,int mode){
-  char rcvbyte[RESBUFSIZE];
-  bool result = false;
-  int cnt = 0;
-  int incomingByte;
+AMWA::WaitResult AMWA::waitResponse(String res, int timeout_ms ,int mode){
+  String line;
+  line.reserve(RESBUFSIZE);
   uint32_t startMillis = millis();
   do {
     //受信が来るまでループ
     if(at_serial->available()>0){
-      //データをバッファに格納
-      incomingByte= at_serial->read();
-      rcvbyte[cnt] = (char)incomingByte;
+      int incomingByte = at_serial->read();
+      if (incomingByte < 0) {
+        continue;
+      }
+      char ch = (char)incomingByte;
       // 注: ここで per-byte に log_serial->write をすると、UNO R4 では USB CDC
       // 呼び出しの per-call オーバーヘッドで UART RX ISR レイテンシが
       // 87us (115200 baud) を超える瞬間があり、HW UART OVERRUN で
       // 文字落ちすることがある。logon の echo は行末で chunk 出力する。
       //改行文字が来たら解析
-      if( rcvbyte[cnt] == TERM){
+      if(ch == TERM){
         // logon=true なら、ここで 1 行ぶんをまとめて echo する
         if(logon){
-          log_serial->write((const uint8_t*)rcvbyte, cnt + 1);
+          if (line.length() > 0) {
+            log_serial->write((const uint8_t*)line.c_str(), line.length());
+          }
+          log_serial->write((uint8_t)TERM);
         }
-        //文字列にするため改行文字をNULLに置き換え
-        rcvbyte[cnt] = '\0';
-        //文字列に変換
-        String rcvstr = String(rcvbyte);
+        // 受信1行ぶん
+        String rcvstr = line;
         // 比較用に trim したコピー (前行 CRLF の LF 残留対策)
         String trimmed = rcvstr;
         trimmed.trim();
@@ -125,18 +432,10 @@ AMWA::WaitResult AMWA::waitResponce(String res, int timeout_ms ,int mode){
         if(trimmed.startsWith("ERROR:")){
           return {false, trimmed};   // エラー文字列は trimmed を返す
         }else{
-          cnt = 0;
+          line = "";
         }
       }else{
-        cnt++;
-        //BUFFサイズを超えたら0にする
-        if(cnt >= RESBUFSIZE){
-          // バッファ満杯時は溜まっているぶんを echo してから wrap
-          if(logon){
-            log_serial->write((const uint8_t*)rcvbyte, RESBUFSIZE);
-          }
-          cnt = 0;
-        }
+        line += ch;
       }
     }
   } while (( millis() - startMillis ) < timeout_ms);
@@ -159,7 +458,7 @@ bool AMWA::wifiConnect(String ssid, String security , String pass, int timeout_m
     para = ssid + "," + security;
   }
   AT_Send("+WCONN=",para);
-  return waitResponce("+WEVENT:LINK_UP",timeout_ms,STARTWITH).result;
+  return waitResponse("+WEVENT:LINK_UP",timeout_ms,STARTWITH).result;
 }
 
 /// @brief UDPオープンコマンド
@@ -169,7 +468,7 @@ int AMWA::UDP_Open(uint16_t port){
   int id = 0;
   String para = "udp," + String(port);
   AT_Send("+SOPEN=",para);
-  WaitResult res= waitResponce("+SOPEN:",3000,STARTWITH);
+  WaitResult res= waitResponse("+SOPEN:",3000,STARTWITH);
   if(res.result){
     //OKだった場合、idを取得
     String idstr = res.restr.substring(7);
@@ -185,7 +484,7 @@ bool AMWA::UDP_Send(int id, String ipaddr,uint16_t port,String  sendstr){
   int len = sendstr.length();
   String para = String(id) + "," + ipaddr +","+ String(port) +"," +  String(len);
   AT_Send("+SSEND=",para);
-  WaitResult  res= waitResponce("OK",1000);
+  WaitResult  res= waitResponse("OK",1000);
   if(res.result){
     at_serial->write(sendstr.c_str());
     at_serial->flush();
@@ -202,7 +501,7 @@ int AMWA::TCP_Server_Open(uint16_t port){
   int id = 0;
   String para = "tcp," + String(port) + ",1";
   AT_Send("+SOPEN=",para);
-  WaitResult res= waitResponce("+SOPEN:",3000,STARTWITH);
+  WaitResult res= waitResponse("+SOPEN:",3000,STARTWITH);
   if(res.result){
     //OKだった場合、idを取得
     String idstr = res.restr.substring(7);
@@ -222,7 +521,7 @@ int AMWA::TCP_Client_Open(String ipaddr, uint16_t port){
   String idstr = "";
   String para = "tcp," + ipaddr +","+ String(port) + ",1";
   AT_Send("+SOPEN=",para);
-  WaitResult res= waitResponce("+SOPEN:",3000,STARTWITH);
+  WaitResult res= waitResponse("+SOPEN:",3000,STARTWITH);
   if(res.result){
     //OKだった場合、idを取得
     idstr = res.restr.substring(7);
@@ -232,7 +531,7 @@ int AMWA::TCP_Client_Open(String ipaddr, uint16_t port){
     id = -1;
     return id;
   }
-  res= waitResponce("+SEVENT:CONNECT,"+idstr,2000,STARTWITH);
+  res= waitResponse("+SEVENT:CONNECT,"+idstr,2000,STARTWITH);
   if(res.result){
     ;
   }else{
@@ -247,7 +546,7 @@ bool AMWA::TCP_Send(int id, String  sendstr){
   int len = sendstr.length();
   String para = String(id) + "," +  String(len);
   AT_Send("+SSEND=",para);
-  WaitResult  res= waitResponce("OK",1000);
+  WaitResult  res= waitResponse("OK",1000);
   if(res.result){
     at_serial->write(sendstr.c_str());
     at_serial->flush();
@@ -262,7 +561,7 @@ bool AMWA::TCP_Send(int id, String  sendstr){
 /// @return OK時はtrue、NG時はfalse
 bool AMWA::Socket_Close(uint16_t id){
   AT_Send("+SCLOSE=",String(id));
-  WaitResult res= waitResponce("+SCLOSE:"+String(id),1000,STARTWITH);
+  WaitResult res= waitResponse("+SCLOSE:"+String(id),1000,STARTWITH);
   if(res.result){
     //OKだった場合
     return true;
@@ -277,7 +576,7 @@ bool AMWA::Socket_Close(uint16_t id){
 /// @return 0以上:受信バイト数 -1:指定ソケットなし/応答タイムアウト
 int AMWA::available(int id){
   AT_Send("+SRECV?","");
-  WaitResult res= waitResponce("+SRECV:" +String(id),1000,STARTWITH);
+  WaitResult res= waitResponse("+SRECV:" +String(id),1000,STARTWITH);
   if (res.result==false)
   {
     return -1;
@@ -291,18 +590,18 @@ int AMWA::available(int id){
 /// @return 0以上:指定ソケットあり -1:指定ソケットなし
 bool AMWA::socket_exists(int id){
   AT_Send("+SLIST?","");
-  return waitResponce("+SLIST:" + String(id), 3000, STARTWITH).result;
+  return waitResponse("+SLIST:" + String(id), 3000, STARTWITH).result;
 }
 
 String AMWA::passive_recv(int id,int len){
   String para = String(id) + "," + String(len);
   AT_Send("+SRECV=",para);
-  WaitResult res= waitResponce("+RXD:" +String(id),1000,STARTWITH);
+  WaitResult res= waitResponse("+RXD:" +String(id),1000,STARTWITH);
   // ヘッダ受信に失敗したらタイムアウトを payload と勘違いさせない
   if(!res.result){
     return String("");
   }
-  res= waitResponce("",1000,STARTWITH);
+  res= waitResponse("",1000,STARTWITH);
   if(!res.result){
     return String("");
   }
@@ -313,7 +612,7 @@ String AMWA::passive_recv(int id,int len){
 bool AMWA::recvmode_set(int mode,int event){
   String para = String(mode) + "," + String(event);
   AT_Send("+SRECVMODE=",para);
-  return waitResponce("OK" ,1000).result;
+  return waitResponse("OK" ,1000).result;
 }
 
 /// @brief 次回起動モード設定
@@ -322,7 +621,7 @@ bool AMWA::recvmode_set(int mode,int event){
 /// @note 即時切替ではなく configstore への予約。settings_save() + reboot() で確定する。
 bool AMWA::mode_set(String mode){
   AT_Send("+WMODE=", mode);
-  return waitResponce("OK", 1000).result;
+  return waitResponse("OK", 1000).result;
 }
 
 /// @brief AP モード用アクセスポイント設定
@@ -343,7 +642,7 @@ bool AMWA::ap_config_set(String ssid, String security, String password, uint16_t
     return false;
   }
   AT_Send("+WAPCFG=", para);
-  return waitResponce("OK", 1000).result;
+  return waitResponse("OK", 1000).result;
 }
 
 /// @brief AP モード用 IP アドレス設定
@@ -354,7 +653,7 @@ bool AMWA::ap_config_set(String ssid, String security, String password, uint16_t
 bool AMWA::ap_ip_set(String ipaddr, String netmask, String gateway){
   String para = ipaddr + "," + netmask + "," + gateway;
   AT_Send("+WAPIP=", para);
-  return waitResponce("OK", 1000).result;
+  return waitResponse("OK", 1000).result;
 }
 
 int AMWA::apsta_get(String *mac_list, int max_count){
@@ -365,7 +664,7 @@ int AMWA::apsta_get(String *mac_list, int max_count){
   }
 
   AT_Send("+WAPSTA?", "");
-  WaitResult res = waitResponce("+WAPSTA:", 1000, STARTWITH);
+  WaitResult res = waitResponse("+WAPSTA:", 1000, STARTWITH);
   if(!res.result){
     return -1;
   }
@@ -380,7 +679,7 @@ int AMWA::apsta_get(String *mac_list, int max_count){
       mac_count++;
     }
 
-    res = waitResponce("+WAPSTA:", 200, STARTWITH);
+    res = waitResponse("+WAPSTA:", 200, STARTWITH);
     if(!res.result){
       break;
     }
@@ -409,7 +708,7 @@ bool AMWA::sta_ap_set(String ssid, String security, String password){
     return false;
   }
   AT_Send("+WAP=", para);
-  return waitResponce("OK", 1000).result;
+  return waitResponse("OK", 1000).result;
 }
 
 /// @brief 設定を不揮発メモリに保存
@@ -417,7 +716,7 @@ bool AMWA::sta_ap_set(String ssid, String security, String password){
 /// @note STA/AP 両方の設定と次回起動モードを一括保存する
 bool AMWA::settings_save(){
   AT_Send("+WSAVE", "");
-  return waitResponce("OK", 1000).result;
+  return waitResponse("OK", 1000).result;
 }
 
 /// @brief AMWA-01 を再起動（ATZ）
@@ -437,21 +736,21 @@ bool AMWA::auto_udp_set(uint16_t local_port, String remote_ip, uint16_t remote_p
   }
   String para = "1," + String(local_port) + "," + remote_ip + "," + String(remote_port);
   AT_Send("+SAUDP=", para);
-  return waitResponce("OK", 1000).result;
+  return waitResponse("OK", 1000).result;
 }
 
 /// @brief 不揮発メモリに保存する UART baudrate を設定する
 /// @return 正常終了時 true
 bool AMWA::baudrate_setting_set(int baudrate){
   AT_Send("+UARTW=", String(baudrate));
-  return waitResponce("OK", 1000).result;
+  return waitResponse("OK", 1000).result;
 }
 
 /// @brief 不揮発メモリに保存されている UART baudrate を取得する
 /// @return 保存されている baudrate。取得失敗時は -1
 int AMWA::baudrate_setting_get(void){
   AT_Send("+UARTW?", "");
-  WaitResult res = waitResponce("+UARTW:", 1000, STARTWITH);
+  WaitResult res = waitResponse("+UARTW:", 1000, STARTWITH);
   if(!res.result){
     return -1;
   }
@@ -462,7 +761,7 @@ int AMWA::baudrate_setting_get(void){
 /// @return 正常終了時 true
 bool AMWA::auto_udp_disable(){
   AT_Send("+SAUDP=", "0");
-  return waitResponce("OK", 1000).result;
+  return waitResponse("OK", 1000).result;
 }
 
 /// @brief AutoUDP モード起動直後に AT* で AT モードへ抜ける
@@ -471,7 +770,7 @@ bool AMWA::auto_udp_disable(){
 /// @note AMWA-01 起動後 5 秒以内（"AutoUDP" 出力後の exit 待ちウィンドウ内）に呼ぶこと
 bool AMWA::auto_udp_escape(unsigned long timeout_ms){
   AT_Send("*", "");
-  return waitResponce("exit", timeout_ms, STARTWITH).result;
+  return waitResponse("exit", timeout_ms, STARTWITH).result;
 }
 
 /// @brief AMWA-01 の起動状態を判別
@@ -485,12 +784,12 @@ bool AMWA::auto_udp_escape(unsigned long timeout_ms){
 ///        誤判定する。timeout_ms 全体を素直に待つしかない。
 AMWA::BootState AMWA::detect_boot_state(unsigned long timeout_ms){
   // "AutoUDP" 出力を待つ。検出できれば設定済み
-  if(waitResponce("AutoUDP", timeout_ms, STARTWITH).result){
+  if(waitResponse("AutoUDP", timeout_ms, STARTWITH).result){
     return BOOT_AUTOUDP;
   }
   // 検出されなければ AT モードかどうか確認するため "AT" を送って "OK" を待つ
   AT_Send("", "");
-  if(waitResponce("OK", 1000, ALLMATCH).result){
+  if(waitResponse("OK", 1000, ALLMATCH).result){
     return BOOT_AT_MODE;
   }
   return BOOT_TIMEOUT;
@@ -503,31 +802,32 @@ AMWA::BootState AMWA::detect_boot_state(unsigned long timeout_ms){
 ///       AP 側では peer の zero-length prime packet (+RXD:<id>,0,...) が先に見える場合も ready と扱う。
 ///       "exit"（AT* 等で AutoUDP を抜けた場合）や "ERROR:" は失敗として早期 return する。
 bool AMWA::wait_autoudp_started(unsigned long timeout_ms){
-  char rcvbyte[RESBUFSIZE];
-  int cnt = 0;
+  String line;
+  line.reserve(RESBUFSIZE);
   uint32_t startMillis = millis();
 
   do {
     if(at_serial->available() > 0){
-      char b = (char)at_serial->read();
-      rcvbyte[cnt] = b;
+      int incomingByte = at_serial->read();
+      if (incomingByte < 0) {
+        continue;
+      }
+      char b = (char)incomingByte;
       // logon の echo は行末で chunk 出力する。per-byte だと UNO R4 で
       // UART RX ISR レイテンシが 87us (115200 baud) deadline を超えて
       // HW OVERRUN を起こすため。
 
       if(b == TERM){
-        // String 化のため TERM を '\0' で上書きするが、ログ echo は TERM を含めて
-        // 出したいので、書き戻すために行長を保持しておく。
-        int line_len = cnt + 1;   // TERM を含む長さ
-        rcvbyte[cnt] = '\0';
-        String rcvstr = String(rcvbyte);
+        String rcvstr = line;
         // 行頭/行末の空白・改行コード（将来 \r\n 混在時の \n 残留など）を除去
         rcvstr.trim();
 
         // 通常行: logon なら 1 行ぶんをまとめて echo してから判定
         if(logon){
-          rcvbyte[cnt] = TERM;   // 書き戻して echo (NUL ではなく TERM を出すため)
-          log_serial->write((const uint8_t*)rcvbyte, line_len);
+          if (line.length() > 0) {
+            log_serial->write((const uint8_t*)line.c_str(), line.length());
+          }
+          log_serial->write((uint8_t)TERM);
         }
 
         // 成功: socket オープン完了
@@ -560,16 +860,9 @@ bool AMWA::wait_autoudp_started(unsigned long timeout_ms){
           return false;
         }
         // start や +WEVENT:CONNECT_SUCCESS / LINK_UP / APSTART_SUCCESS などはログ扱いで継続
-        cnt = 0;
+        line = "";
       }else{
-        cnt++;
-        if(cnt >= RESBUFSIZE){
-          // バッファ満杯時は溜まっているぶんを echo してから wrap
-          if(logon){
-            log_serial->write((const uint8_t*)rcvbyte, RESBUFSIZE);
-          }
-          cnt = 0;
-        }
+        line += b;
       }
     }
   } while ((millis() - startMillis) < timeout_ms);

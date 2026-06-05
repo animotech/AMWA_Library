@@ -1,4 +1,4 @@
-#include <AMWA_LIB.h>
+﻿#include <AMWA_LIB.h>
 // シリアル設定
 #define AT_SERIAL Serial1
 #define INFO_SERIAL Serial
@@ -38,7 +38,7 @@ void setup()
     // DHCPをON
     INFO_SERIAL.println("set DHCP mode : DHCP mode=" + String(DHCP_ENABLE));
     wifihalow.AT_Send("+WDHCP=", String(DHCP_ENABLE));
-    AMWA::WaitResult res = wifihalow.waitResponce("OK", 1000, ALLMATCH);
+    AMWA::WaitResult res = wifihalow.waitResponse("OK", 1000, ALLMATCH);
     if (!res.result)
     {
       INFO_SERIAL.println("failed. retry initialize.");
@@ -49,7 +49,7 @@ void setup()
     INFO_SERIAL.println("set ip address : {LocalIP,Subnet,Gateway}={" + LOCAL_IP + "," + SUBNET + "," + GATEWAY + "}");
     // IPアドレスを設定
     wifihalow.AT_Send("+WIPADDR=", LOCAL_IP + "," + SUBNET + "," + GATEWAY);
-    res = wifihalow.waitResponce("OK", 1000, ALLMATCH);
+    res = wifihalow.waitResponse("OK", 1000, ALLMATCH);
     if (!res.result)
     {
       INFO_SERIAL.println("failed. retry initialize.");
@@ -60,7 +60,7 @@ void setup()
     INFO_SERIAL.println("set receive mode : {ReceiveMode,EventFlag}={" + String(PASSIVEMODE) + "," + String(EVENT_ENABLE) + "}");
     // 受信モードをパッシブ、イベント有効に設定
     wifihalow.AT_Send("+SRECVMODE=", String(PASSIVEMODE) + "," + String(EVENT_ENABLE));
-    res = wifihalow.waitResponce("OK", 1000, ALLMATCH);
+    res = wifihalow.waitResponse("OK", 1000, ALLMATCH);
     if (!res.result)
     {
       INFO_SERIAL.println("failed. retry initialize.");
@@ -71,7 +71,7 @@ void setup()
     // アクセスポイント接続
     INFO_SERIAL.println("connect to access point : {SSID,security,passphrase}={" + SSID + "," + SEC + "," + PASS + "}");
     wifihalow.AT_Send("+WCONN=", SSID + "," + SEC + "," + PASS);
-    res = wifihalow.waitResponce("+WEVENT:LINK_UP", 50000, STARTWITH);
+    res = wifihalow.waitResponse("+WEVENT:LINK_UP", 50000, STARTWITH);
     if (!res.result)
     {
       INFO_SERIAL.println("failed. retry initialize.");
@@ -82,7 +82,7 @@ void setup()
     //UDPオープン
     INFO_SERIAL.println("open udp socket : LocalPort=" + String(LOCAL_PORT));
     wifihalow.AT_Send("+SOPEN=", "udp,"+String(LOCAL_PORT));
-    res = wifihalow.waitResponce("+SOPEN:", 1000, STARTWITH);
+    res = wifihalow.waitResponse("+SOPEN:", 1000, STARTWITH);
     if (!res.result)
     {
       INFO_SERIAL.println("failed. retry initialize.");
@@ -103,7 +103,7 @@ void loop() {
   int receivedBytes=0;
   //UDP受信チェック
   wifihalow.AT_Send("+SRECV?","");
-  AMWA::WaitResult res = wifihalow.waitResponce("+SRECV:"+String(udpid), 1000, STARTWITH);
+  AMWA::WaitResult res = wifihalow.waitResponse("+SRECV:"+String(udpid), 1000, STARTWITH);
   if (res.result)
   {
     receivedBytes = res.restr.substring(9).toInt();
@@ -115,15 +115,15 @@ void loop() {
 
     //UDPデータ取得
     wifihalow.AT_Send("+SRECV=",String(udpid)+","+String(receivedBytes));
-    res = wifihalow.waitResponce("+RXD:" + String(udpid), 1000, STARTWITH);
-    res = wifihalow.waitResponce("", 1000, STARTWITH);
+    res = wifihalow.waitResponse("+RXD:" + String(udpid), 1000, STARTWITH);
+    res = wifihalow.waitResponse("", 1000, STARTWITH);
     String receivedString = res.restr;
 
     INFO_SERIAL.println("udp received string : " +receivedString);
 
     //UDPデータ送信
     wifihalow.AT_Send("+SSEND=", String(udpid) + "," + REMOTE_IP + "," + String(REMOTE_PORT) + "," + String(receivedBytes) + ",0");
-    res = wifihalow.waitResponce("OK", 1000);
+    res = wifihalow.waitResponse("OK", 1000);
     if (res.result)
     {
       wifihalow.at_serial->write(receivedString.c_str());

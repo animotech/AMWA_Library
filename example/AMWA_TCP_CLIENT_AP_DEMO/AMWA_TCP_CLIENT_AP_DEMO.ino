@@ -1,4 +1,4 @@
-/*
+﻿/*
  * AMWA_TCP_CLIENT_AP_DEMO
  *
  * AMWA-01 を AP モードで起動し、TCP client として動作するサンプルです。
@@ -89,7 +89,7 @@ void setup() {
   wifihalow.reboot();
 
   // AP起動待ち
-  AMWA::WaitResult res = wifihalow.waitResponce("+WEVENT:APSTART_SUCCESS",40000,STARTWITH);
+  AMWA::WaitResult res = wifihalow.waitResponse("+WEVENT:APSTART_SUCCESS",40000,STARTWITH);
   if(!res.result){
     INFO_SERIAL.println("Failed to start AP mode.");
     NVIC_SystemReset();

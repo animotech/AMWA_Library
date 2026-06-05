@@ -1,4 +1,4 @@
-/*
+﻿/*
  * AMWA_UDP_AP_DEMO
  *
  * AMWA-01 を AP モードで起動し、UDP 通信を行うサンプルです。
@@ -98,7 +98,7 @@ void setup() {
   wifihalow.reboot();
 
   //起動メッセージ待ち
-  AMWA::WaitResult res = wifihalow.waitResponce("+WEVENT:APSTART_SUCCESS",40000,STARTWITH);
+  AMWA::WaitResult res = wifihalow.waitResponse("+WEVENT:APSTART_SUCCESS",40000,STARTWITH);
   if(!res.result){
     INFO_SERIAL.println("Failed to start AP mode.");
     NVIC_SystemReset();

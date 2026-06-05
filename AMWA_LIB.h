@@ -1,10 +1,10 @@
-
+﻿
 #ifndef AMWA_LIB_H
 #define AMWA_LIB_H
 #include <Arduino.h>
 #include<string>
 
-//waitResponce
+//waitResponse
 #define  ALLMATCH 0
 #define  STARTWITH 1
 #define  ENDWITH 2
@@ -19,7 +19,6 @@
 #define  DHCP_DISABLE 0
 #define  DHCP_ENABLE 1
 
-using namespace std;
 class AMWA
 {
   public:
@@ -42,7 +41,7 @@ class AMWA
   bool ipaddr_set(String  ipaddr,String  subnet, String  gateway);
   bool dhcp_on(int enable);
   void AMWA_init( void );
-  WaitResult waitResponce(String res, int timeout_ms ,int mode=ALLMATCH);
+  WaitResult waitResponse(String res, int timeout_ms ,int mode=ALLMATCH);
   bool wifiConnect(String ssid, String security , String pass, int timeout_ms);
 
   int UDP_Open(uint16_t port);
@@ -84,6 +83,20 @@ class AMWA
   // ---- AutoUDP 起動シーケンス ----
   BootState detect_boot_state(unsigned long timeout_ms);                          // 起動直後に AT/AutoUDP を判別
   bool wait_autoudp_started(unsigned long timeout_ms);                            // "+SOPEN:" で成功 / "exit" or "ERROR:" で失敗 / "start" や "+WEVENT:*" は通過
+
+  // ---- AT専用 helper ----
+  void at_receive_begin();                                                        // AT受信側内部状態を初期化
+  void at_receive_poll();                                                         // AT受信をFIFOへ取り込む
+  size_t at_output_block(Stream &out, size_t maxChunk = 256);                    // CR終端ブロックを指定出力へ送る
+  bool at_receive_waiting_response();                                             // 応答待ち中か判定
+  void at_send_byte(uint8_t b);                                                   // ATへ1byte送信
+  size_t at_send_bytes(const uint8_t *data, size_t len);                          // ATへ複数byte送信
+
+  // ---- LOG専用 helper ----
+  void log_receive_line_begin(size_t reserveLen = 128);                           // LOG入力1行バッファ初期化
+  bool log_receive_line(String &outLine, size_t maxLen = 128, int budget = 64);  // LOG入力をCRLFで1行取得
+
+  String log_line_buf;
 
 };
 

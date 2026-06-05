@@ -1,4 +1,4 @@
-/*
+﻿/*
  * AMWA_UDP_STA_DEMO
  *
  * AMWA-01 を STA モードで起動し、UDP 通信を行うサンプルです。
@@ -81,7 +81,7 @@ void setup() {
   wifihalow.reboot();
   
   //起動メッセージ待ち
-  AMWA::WaitResult res = wifihalow.waitResponce("FW_VERSION:",40000,STARTWITH);
+  AMWA::WaitResult res = wifihalow.waitResponse("FW_VERSION:",40000,STARTWITH);
   if(!res.result){
     INFO_SERIAL.println("Failed to start STA mode.");
     NVIC_SystemReset();
