@@ -335,8 +335,6 @@ void AMWA::AMWA_init( void ){
 /// @param para  送信するパラメータ
 void AMWA::AT_Send(String  atcmd,String  para){
   String  sendstr ="AT" + atcmd + para +TERM;
-  //UART受信のバッファを読み込んでクリア
-  while (at_serial->available())at_serial->read();
   //送信
   at_serial->print(sendstr);
   at_serial->flush();
